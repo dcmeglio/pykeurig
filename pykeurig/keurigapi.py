@@ -15,7 +15,7 @@ from pykeurig.const import (API_URL, BREW_CATEGORY_CUSTOM, BREW_CATEGORY_FAVORIT
     BREW_HOT_WATER, BREW_OVER_ICE, BREWER_STATUS_READY, CLIENT_ID, COMMAND_NAME_BREW, 
     COMMAND_NAME_CANCEL_BREW, COMMAND_NAME_OFF, COMMAND_NAME_ON, 
     HEADER_OCP_SUBSCRIPTION_KEY, HEADER_USER_AGENT, NODE_APPLIANCE_STATE, 
-    NODE_BREW_STATE, NODE_POD_STATE, POD_STATUS_EMPTY, STATUS_ON, 
+    NODE_BREW_STATE, NODE_POD_STATE, NODE_SW_INFO, POD_STATUS_EMPTY, STATUS_ON, 
     Intensity, Size, Temperature)
 
 
@@ -87,6 +87,26 @@ class KeurigApi:
 
         # We need to do this to get the URL
         await self._async_get_signalr_access_token()
+        
+        hub_connection = HubConnectionBuilder()\
+            .with_url(self._signalr_url, options={
+                "access_token_factory": self._get_signalr_access_token
+            })\
+            .with_automatic_reconnect({
+                "type": "raw",
+                "keep_alive_interval": 10,
+                "reconnect_interval": 5,
+                "max_attempts": 5
+            }).build()
+        hub_connection.on("appliance-notifications",self._receive_signalr)
+        hub_connection.start()
+        return True
+
+    def connect(self):
+        """Establishes a connection to the SignalR server to receive real-time push notifications."""
+
+        # We need to do this to get the URL
+        self._get_signalr_access_token()
         
         hub_connection = HubConnectionBuilder()\
             .with_url(self._signalr_url, options={
@@ -326,6 +346,7 @@ class KeurigDevice:
         self._id = id
         self._serial = serial
         self._model = model
+        self._sw_version = None
         self._appliance_status = None
         self._brewer_status = None
         self._pod_status = None
@@ -349,6 +370,11 @@ class KeurigDevice:
     def model(self):
         """Get the device model"""
         return self._model
+
+    @property
+    def sw_version(self):
+        """Get the device firmware version"""
+        return self._sw_version
 
     @property
     def appliance_status(self):
@@ -512,10 +538,12 @@ class KeurigDevice:
             appliance_state = next((item for item in json_result if item['name'] == NODE_APPLIANCE_STATE))
             brew_state = next((item for item in json_result if item['name'] == NODE_BREW_STATE))
             pod_state = next((item for item in json_result if item['name'] == NODE_POD_STATE))
+            sw_info = next((item for item in json_result if item['name'] == NODE_SW_INFO))
 
             self._appliance_status = appliance_state['value']['current']
             self._brewer_status = brew_state['value']['current']
             self._pod_status = pod_state['value']['pm_content']
+            self._sw_version = sw_info['value']['appliance']
             if brew_state['value']['lock_cause'] is not None:
                 self._brewer_error = brew_state['value']['lock_cause']
             elif brew_state['value']['error'] is not None:
