@@ -529,6 +529,9 @@ class KeurigDevice:
         """Removes a callback that gets triggered when an event is received."""
         self._callbacks.remove(callback)
 
+    async def async_update(self):
+        await self._async_update_properties()
+
     async def _async_update_properties(self): 
         """Asynchronously update the device properties"""
         try:
