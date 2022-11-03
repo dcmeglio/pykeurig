@@ -126,8 +126,14 @@ class KeurigApi:
         """Gets the SignalR URL and access token asynchronously"""
         res = await self._async_get("api/clnt/v1/signalr/negotiate")
         json_result = res.json()
-        self._signalr_access_token = json_result['accessToken']
-        self._signalr_url = json_result['url']
+        if "accessToken" in json_result.keys():
+            self._signalr_access_token = json_result['accessToken']
+        else:
+            self._signalr_access_token = json_result['AccessToken']
+        if "url" in json_result.keys():
+            self._signalr_url = json_result['url']
+        else:
+            self._signalr_url = json_result['Url']
         self._signalr_url = self._signalr_url.replace("https://", "wss://")
         return self._signalr_access_token
 
@@ -136,8 +142,14 @@ class KeurigApi:
         
         res = self._get("api/clnt/v1/signalr/negotiate")
         json_result = res.json()
-        self._signalr_access_token = json_result['accessToken']
-        self._signalr_url = json_result['url']
+        if "accessToken" in json_result.keys():
+            self._signalr_access_token = json_result['accessToken']
+        else:
+            self._signalr_access_token = json_result['AccessToken']
+        if "url" in json_result.keys():
+            self._signalr_url = json_result['url']
+        else:
+            self._signalr_url = json_result['Url']
         self._signalr_url = self._signalr_url.replace("https://", "wss://")
         return self._signalr_access_token
 
@@ -559,9 +571,9 @@ class KeurigDevice:
                     callback(self)
                 except:
                     pass
+            return json_result
         except:
             pass
-        return json_result
 
     def _update_properties(self):
         """Synchronously update the device properties"""
