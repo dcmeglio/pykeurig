@@ -8,14 +8,14 @@ API_URL = "https://iot.keurig.com/connected-platform/"
 CLIENT_ID = "cbma-v1"
 
 # Brew Temperatures
-class Size(Enum):
+class Size(int, Enum):
     Four = 4,
     Six = 6,
     Eight = 8,
     Ten = 10,
     Twelve = 12
 
-class Temperature(Enum):
+class Temperature(int, Enum):
     TEMPERATURE_WARM=187
     TEMPERATURE_WARMER=191
     TEMPERATURE_HOT=194
@@ -24,7 +24,7 @@ class Temperature(Enum):
     TEMPERATURE_MAXHOT=204
 
 # Brew Intensities
-class Intensity(Enum):
+class Intensity(int, Enum):
     Balanced=4435
     Rich=3942
     Robust=3449
