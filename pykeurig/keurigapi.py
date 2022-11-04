@@ -421,8 +421,8 @@ class KeurigDevice:
     async def hot_water(self, size: Size, temp: Temperature):
         """Brew hot water at the specified size and temperature"""
         await self._async_update_properties()
-        # Must be on, ready, and empty
-        if self._appliance_status != STATUS_ON or self._brewer_status != BREWER_STATUS_READY or self._pod_status != POD_STATUS_EMPTY:
+        # Must be ready, and empty
+        if self._brewer_status != BREWER_STATUS_READY or self._pod_status != POD_STATUS_EMPTY:
             return False
 
         await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_BREW, 'params': 
@@ -440,8 +440,8 @@ class KeurigDevice:
         """Brew a hot drink at the specified size, temperature, and intensity"""
 
         await self._async_update_properties()
-        # Must be on, ready, and not empty
-        if self._appliance_status != STATUS_ON or self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
+        # Must be ready, and not empty
+        if self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
             return False
 
         await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_BREW, 'params': 
@@ -459,8 +459,8 @@ class KeurigDevice:
         """Brew an iced drink"""
 
         await self._async_update_properties()
-        # Must be on, ready, and not empty
-        if self._appliance_status != STATUS_ON or self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
+        # Must be ready, and not empty
+        if self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
             return False
 
         await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_BREW, 'params': 
@@ -477,8 +477,8 @@ class KeurigDevice:
     async def brew_recommendation(self, size: Size):
         """Brew a drink at the recommended settings for the k-cup at the specified size"""
         json_result = await self._async_update_properties()
-        # Must be on, ready, and not empty
-        if self._appliance_status != STATUS_ON or self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
+        # Must be ready, and not empty
+        if self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
             return False
         # get recommended brew settings based on size
         pod_state = next((item for item in json_result if item['name'] == NODE_POD_STATE))
@@ -500,8 +500,8 @@ class KeurigDevice:
     async def brew_favorite(self, favoriteId: str):
         """Brew the specified favorite setting"""
         await self._async_update_properties()
-        # Must be on, ready, and not empty
-        if self._appliance_status != STATUS_ON or self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
+        # Must be ready, and not empty
+        if self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
             return False
 
         # get favorite
@@ -572,8 +572,8 @@ class KeurigDevice:
                 except:
                     pass
             return json_result
-        except:
-            pass
+        except Exception as err:
+            _LOGGER.error(err)
 
     def _update_properties(self):
         """Synchronously update the device properties"""
@@ -600,9 +600,10 @@ class KeurigDevice:
                     callback(self)
                 except:
                     pass
-        except:
-            pass
-        return json_result
+            return json_result
+        except Exception as err:
+            _LOGGER.error(err)
+        
 
     def _update_states(self, appliance_status: str = None, brewer_status: str = None, brewer_error: str = None, pod_status: str = None):
         if appliance_status is not None:

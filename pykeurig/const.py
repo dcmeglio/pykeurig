@@ -16,12 +16,12 @@ class Size(int, Enum):
     Twelve = 12
 
 class Temperature(int, Enum):
-    TEMPERATURE_WARM=187
-    TEMPERATURE_WARMER=191
-    TEMPERATURE_HOT=194
-    TEMPERATURE_HOTTER=197
-    TEMPERATURE_XHOT=200
-    TEMPERATURE_MAXHOT=204
+    Warm=187
+    Warmer=191
+    Hot=194
+    Hotter=197
+    XHot=200
+    MaxHot=204
 
 # Brew Intensities
 class Intensity(int, Enum):
