@@ -25,11 +25,11 @@ class Temperature(Enum):
 
 # Brew Intensities
 class Intensity(Enum):
-    BREW_BALANCED=4435
-    BREW_RICH=3942
-    BREW_ROBUST=3449
-    BREW_STRONG=2957
-    BREW_INTENSE=2464
+    Balanced=4435
+    Rich=3942
+    Robust=3449
+    Strong=2957
+    Intense=2464
 
 # Commands
 #Get high altitude setting
