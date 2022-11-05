@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+from tzlocal import get_localzone
 
 from typing import Callable, Dict, Hashable, Optional, Tuple
 import uuid
@@ -10,12 +11,11 @@ import httpx
 
 from signalrcore.hub_connection_builder import HubConnectionBuilder
 
-from pykeurig.const import (API_URL, BREW_CATEGORY_CUSTOM, BREW_CATEGORY_FAVORITE, 
-    BREW_CATEGORY_ICED, BREW_CATEGORY_RECOMMENDED, BREW_CATEGORY_WATER, BREW_COFFEE, 
+from pykeurig.const import (API_URL, BREW_COFFEE, 
     BREW_HOT_WATER, BREW_OVER_ICE, BREWER_STATUS_READY, CLIENT_ID, COMMAND_NAME_BREW, 
     COMMAND_NAME_CANCEL_BREW, COMMAND_NAME_OFF, COMMAND_NAME_ON, FAVORITE_BREW_MODE, FAVORITE_MODEL_NAME, 
     HEADER_OCP_SUBSCRIPTION_KEY, HEADER_USER_AGENT, NODE_APPLIANCE_STATE, 
-    NODE_BREW_STATE, NODE_POD_STATE, NODE_SW_INFO, POD_STATUS_EMPTY, STATUS_ON, 
+    NODE_BREW_STATE, NODE_POD_STATE, NODE_SW_INFO, POD_STATUS_EMPTY, STATUS_ON, BrewCategory, DaysOfWeek, 
     Intensity, Size, Temperature)
 
 
@@ -51,7 +51,6 @@ class KeurigApi:
         finally:
             await client.aclose()
         return True
-
 
     async def async_get_customer(self):
         """Retrieves the customer information associated with the username logged into the API"""
@@ -508,7 +507,7 @@ class KeurigDevice:
             'flow_rate': Intensity.Balanced,
             'temp': temp,
             'enhanced': True,
-            'category': BREW_CATEGORY_WATER
+            'category': BrewCategory.Water
         }})
         return True
 
@@ -527,7 +526,7 @@ class KeurigDevice:
             'flow_rate': intensity,
             'temp': temp,
             'enhanced': True,
-            'category': BREW_CATEGORY_CUSTOM
+            'category': BrewCategory.Custom
         }})
         return True
 
@@ -546,7 +545,7 @@ class KeurigDevice:
             'flow_rate': Intensity.BREW_INTENSE,
             'temp': 201,
             'enhanced': True,
-            'category': BREW_CATEGORY_ICED
+            'category': BrewCategory.Iced
         }})
         return True
 
@@ -570,7 +569,7 @@ class KeurigDevice:
             'flow_rate': flow_rate,
             'temp': temp,
             'enhanced': True,
-            'category': BREW_CATEGORY_RECOMMENDED
+            'category': BrewCategory.Recommended
         }})
 
     async def brew_favorite(self, favorite_id: str):
@@ -598,7 +597,7 @@ class KeurigDevice:
                  'flow_rate': flow_rate,
                  'temp': temp,
                 'enhanced': True,
-                'category': BREW_CATEGORY_FAVORITE
+                'category': BrewCategory.Favorite
             }})
 
     async def cancel_brew(self):
@@ -608,6 +607,146 @@ class KeurigDevice:
         except:
             return False
         return True
+
+    async def get_schedules(self):
+        """Get the list of schedules."""
+        try:
+            res = await self._api._async_get("api/usdm/v1/schedules")
+            json_result = res.json()
+            matching_schedules = list((schedule for schedule in json_result if schedule['brewer_id'] == self._id))
+            return matching_schedules
+        except:
+            return None
+
+    async def add_schedule(self, name: str, enabled: bool, repeat: bool, time_val: time.struct_time, days: DaysOfWeek, brew_type: BrewCategory,
+        recommended = False, favorite_id = None, size: Size = None, temperature: Temperature = None, intensity: Intensity = None):
+        """Create a new schedule"""
+        offset = int((time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)/60)
+        if brew_type == BrewCategory.Favorite:
+            payload_parameters = {
+                'id': favorite_id
+            }
+        else:
+            payload_parameters = {
+                'recipe_format_version': "1.0",
+                'size': int(size) if brew_type != BrewCategory.Iced else 6
+            }
+            if brew_type == BrewCategory.Water or brew_type == BrewCategory.Custom:
+                payload_parameters['flowRate'] = int(intensity)
+                payload_parameters['temperature'] = int(temperature)
+
+        payload = {
+            'category': self._category_to_schedule_str(brew_type),
+            'parameters': json.dumps(payload_parameters)
+        }
+
+        schedule_obj = {
+            'id': None,
+            'version': "1.0",
+            'enabled': enabled,
+            'name': name,
+            'brewer_id': self._id,
+            'schedule_type': 'Brew',
+            'repeatable': repeat,
+            'scheduled_time': {
+                'hours': time_val.tm_hour,
+                'minutes': time_val.tm_min,
+                'offset': -offset,
+                'dst': time.localtime().tm_isdst,
+                'timezone': str(get_localzone())
+            },
+            'scheduled_days': self._days_flags_to_array(days),
+            'payload': json.dumps(payload)
+        }
+        
+        await self._api._async_post("api/usdm/v1/schedules", data=schedule_obj)
+
+    async def update_schedule(self, schedule_id: str, name: str, enabled: bool, repeat: bool, time_val: time.struct_time, days: DaysOfWeek, brew_type: BrewCategory,
+        recommended = False, favorite_id = None, size: Size = None, temperature: Temperature = None, intensity: Intensity = None):
+        """Update an existing schedule"""
+        offset = int((time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)/60)
+        if brew_type == BrewCategory.Favorite:
+            payload_parameters = {
+                'id': favorite_id
+            }
+        else:
+            payload_parameters = {
+                'recipe_format_version': "1.0",
+                'size': int(size) if brew_type != BrewCategory.Iced else 6
+            }
+            if brew_type == BrewCategory.Water or brew_type == BrewCategory.Custom:
+                payload_parameters['flowRate'] = int(intensity)
+                payload_parameters['temperature'] = int(temperature)
+
+        payload = {
+            'category': self._category_to_schedule_str(brew_type),
+            'parameters': json.dumps(payload_parameters)
+        }
+
+        schedule_obj = {
+            'id': None,
+            'version': "1.0",
+            'enabled': enabled,
+            'name': name,
+            'brewer_id': self._id,
+            'schedule_type': 'Brew',
+            'repeatable': repeat,
+            'scheduled_time': {
+                'hours': time_val.tm_hour,
+                'minutes': time_val.tm_min,
+                'offset': -offset,
+                'dst': time.localtime().tm_isdst,
+                'timezone': str(get_localzone())
+            },
+            'scheduled_days': self._days_flags_to_array(days),
+            'payload': json.dumps(payload)
+        }
+        
+        await self._api._async_put("api/usdm/v1/schedules/" + schedule_id, data=schedule_obj)
+
+
+    def _days_flags_to_array(self, days: DaysOfWeek):
+        days_array = []
+        if days & DaysOfWeek.Sunday:
+            days_array.append("Sunday")
+        if days & DaysOfWeek.Monday:
+            days_array.append("Monday")
+        if days & DaysOfWeek.Tuesday:
+            days_array.append("Tuesday")
+        if days & DaysOfWeek.Wednesday:
+            days_array.append("Wednesday")                                
+        if days & DaysOfWeek.Thursday:
+            days_array.append("Thursday")
+        if days & DaysOfWeek.Friday:
+            days_array.append("Friday")
+        if days & DaysOfWeek.Saturday:
+            days_array.append("Saturday")
+        return days_array                                 
+
+    def _category_to_schedule_str(self, category: BrewCategory):
+        if category == BrewCategory.Favorite:
+            return "Favorite"
+        if category == BrewCategory.Recommended:
+            return "Recommended"
+        if category == BrewCategory.Custom:
+            return "Custom"
+        if category == BrewCategory.Iced:
+            return "Iced"
+        if category == BrewCategory.Water:
+            return "Water"
+
+
+  #"payload": "{\"category\":\"Favorite\",\"parameters\":\"{\\\"id\\\":\\\"5e00ce8b2d7f46e49e9a33d81cd69fc2\\\"}\"}",
+
+
+
+    async def delete_schedule(self, schedule_id: str):
+        """Delete the specified schedule"""
+        try:
+            await self._api._async_delete("api/usdm/v1/schedules/" + schedule_id)
+            return True
+        except:
+            return False
 
     def register_callback(self, callback=lambda *args, **kwargs: None):
         """Adds a callback to be triggered when an event is received."""

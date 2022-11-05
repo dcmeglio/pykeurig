@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, IntFlag
 # Headers
 HEADER_USER_AGENT = "K-Connect/5663 CFNetwork/1390 Darwin/22.0.0"
 HEADER_OCP_SUBSCRIPTION_KEY = "6e2ad707ae5249089f9dbf8ed011c38c"
@@ -92,15 +92,12 @@ BREW_OVER_ICE = "ICED"
 
 #Brew categories
 # Hot water
-BREW_CATEGORY_WATER = "WATER"
-# Favorite brew
-BREW_CATEGORY_FAVORITE = "FAVORITE"
-# Custom brew
-BREW_CATEGORY_CUSTOM = "CUSTOM"
-# Iced coffee
-BREW_CATEGORY_ICED = "ICED"
-# Recommended brew
-BREW_CATEGORY_RECOMMENDED = "MASTER"
+class BrewCategory(Enum):
+    Water = "WATER",
+    Favorite = "FAVORITE",
+    Iced = "ICED",
+    Recommended = "MASTER",
+    Custom = "CUSTOM"
 
 # Appliance state
 NODE_APPLIANCE_STATE = "appl_state"
@@ -111,3 +108,12 @@ NODE_SW_INFO = "sw_info"
 # Favorite Constants
 FAVORITE_BREW_MODE = "traditional"
 FAVORITE_MODEL_NAME = "K29"
+
+class DaysOfWeek(IntFlag):
+    Sunday = 1,
+    Monday = 2,
+    Tuesday = 4,
+    Wednesday = 8,
+    Thursday = 16,
+    Friday = 32,
+    Saturday = 64
