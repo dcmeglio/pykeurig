@@ -14,7 +14,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/dcmeglio/pykeurig",
     packages=setuptools.find_packages(),
-    install_requires=["httpx", "signalrcore"],
+    install_requires=["httpx", "signalrcore","tzlocal"],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
