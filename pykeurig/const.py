@@ -107,3 +107,7 @@ NODE_APPLIANCE_STATE = "appl_state"
 NODE_BREW_STATE = "brew_state"
 NODE_POD_STATE = "lid_recog_result"
 NODE_SW_INFO = "sw_info"
+
+# Favorite Constants
+FAVORITE_BREW_MODE = "traditional"
+FAVORITE_MODEL_NAME = "K29"

@@ -13,7 +13,7 @@ from signalrcore.hub_connection_builder import HubConnectionBuilder
 from pykeurig.const import (API_URL, BREW_CATEGORY_CUSTOM, BREW_CATEGORY_FAVORITE, 
     BREW_CATEGORY_ICED, BREW_CATEGORY_RECOMMENDED, BREW_CATEGORY_WATER, BREW_COFFEE, 
     BREW_HOT_WATER, BREW_OVER_ICE, BREWER_STATUS_READY, CLIENT_ID, COMMAND_NAME_BREW, 
-    COMMAND_NAME_CANCEL_BREW, COMMAND_NAME_OFF, COMMAND_NAME_ON, 
+    COMMAND_NAME_CANCEL_BREW, COMMAND_NAME_OFF, COMMAND_NAME_ON, FAVORITE_BREW_MODE, FAVORITE_MODEL_NAME, 
     HEADER_OCP_SUBSCRIPTION_KEY, HEADER_USER_AGENT, NODE_APPLIANCE_STATE, 
     NODE_BREW_STATE, NODE_POD_STATE, NODE_SW_INFO, POD_STATUS_EMPTY, STATUS_ON, 
     Intensity, Size, Temperature)
@@ -75,12 +75,26 @@ class KeurigApi:
 
         return self._devices
 
+    async def async_add_favorite(self, name: str, size: Size, temperature: Temperature, intensity: Intensity):
+        """Add a favorite"""
+        await self._async_post("api/usdm/v1/presets", data={'name': name, 'size': int(size), 'temperature': int(temperature), 
+            'flowRate': int(intensity), 'brewMode': FAVORITE_BREW_MODE, 'deviceModel': FAVORITE_MODEL_NAME})
+
+    async def async_update_favorite(self, id: str, name: str, size: Size, temperature: Temperature, intensity: Intensity):
+        """Update a favorite"""
+        await self._async_put("api/usdm/v1/presets/" + id, data={'name': name, 'size': int(size), 'temperature': int(temperature), 
+            'flowRate': int(intensity), 'brewMode': FAVORITE_BREW_MODE, 'deviceModel': FAVORITE_MODEL_NAME})
+
     async def async_get_favorites(self):
         """Retrieves the list of favorites from the API"""
         res = await self._async_get("api/usdm/v1/presets")
         json_result = res.json()
 
         return json_result
+
+    async def async_delete_favorite(self, favorite_id: str):
+        """Delete a favorite"""
+        await self._async_delete("api/usdm/v1/presets/" + favorite_id)
 
     async def async_connect(self):
         """Establishes a connection to the SignalR server to receive real-time push notifications."""
@@ -243,6 +257,68 @@ class KeurigApi:
                 client.headers.update(headers)
 
                 res = await client.post(endpoint
+                    , content=content, json=data, timeout=self.timeout)
+            res.raise_for_status()
+        finally:
+            await client.aclose()
+
+    async def _async_delete(
+            self,
+            request: str,
+            headers: Optional[Dict] = None) -> httpx.Response:
+        """Call DELETE endpoint of Keurig API asynchronously."""
+        
+        endpoint = f"{API_URL}{request}"
+
+        if self._token_expires_at <= time.time() and self._token_expires_at is not None:
+            await self._async_refresh_token()
+
+        client = httpx.AsyncClient()
+
+        try:
+            client.headers = self._get_headers()
+            client.headers.update(headers)
+
+            res = await client.delete(endpoint, timeout=self.timeout)
+            if res.status_code == 401:
+                await self._async_refresh_token()
+                client.headers = self._get_headers()
+                client.headers.update(headers)
+
+                res = await client.delete(endpoint, timeout=self.timeout)
+            res.raise_for_status()
+        finally:
+            await client.aclose()
+
+        return res
+
+    async def _async_put(
+            self,
+            request: str,
+            content: Optional[bytes] = None,
+            data: Optional[Dict] = None,
+            headers: Optional[Dict] = None) -> httpx.Response:
+        """Call PUT endpoint of Keurig API asynchronously."""
+        
+        endpoint = f"{API_URL}{request}"
+
+        if self._token_expires_at <= time.time() and self._token_expires_at is not None:
+            await self._async_refresh_token()
+
+        client = httpx.AsyncClient()
+
+        try:
+            client.headers = self._get_headers()
+            client.headers.update(headers)
+
+            res = await client.put(endpoint
+                , content=content, json=data, timeout=self.timeout)
+            if res.status_code == 401:
+                await self._async_refresh_token()
+                client.headers = self._get_headers()
+                client.headers.update(headers)
+
+                res = await client.put(endpoint
                     , content=content, json=data, timeout=self.timeout)
             res.raise_for_status()
         finally:
@@ -497,7 +573,7 @@ class KeurigDevice:
             'category': BREW_CATEGORY_RECOMMENDED
         }})
 
-    async def brew_favorite(self, favoriteId: str):
+    async def brew_favorite(self, favorite_id: str):
         """Brew the specified favorite setting"""
         await self._async_update_properties()
         # Must be ready, and not empty
@@ -507,7 +583,7 @@ class KeurigDevice:
         # get favorite
         favorites = await self._api.async_get_favorites()
 
-        favorite = next((fav for fav in favorites if fav['id'] == favoriteId))
+        favorite = next((fav for fav in favorites if fav['id'] == favorite_id))
 
         if favorite is not None:
             size = favorite['size']
@@ -542,6 +618,7 @@ class KeurigDevice:
         self._callbacks.remove(callback)
 
     async def async_update(self):
+        """Update the device properties"""
         await self._async_update_properties()
 
     async def _async_update_properties(self): 
@@ -603,13 +680,3 @@ class KeurigDevice:
             return json_result
         except Exception as err:
             _LOGGER.error(err)
-        
-
-    def _update_states(self, appliance_status: str = None, brewer_status: str = None, brewer_error: str = None, pod_status: str = None):
-        if appliance_status is not None:
-            self._appliance_status = appliance_status
-        if brewer_status is not None:
-            self._brewer_status = brewer_status
-        self._brewer_error = brewer_error
-        if pod_status is not None:
-            self._pod_status = pod_status
