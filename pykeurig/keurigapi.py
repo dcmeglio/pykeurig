@@ -217,12 +217,16 @@ class KeurigApi:
             res = client.post(endpoint
                 , content=content, json=data, timeout=self.timeout)
             if res.status_code == 401:
-                self._refresh_token()
+                if not self._refresh_token():
+                    raise UnauthorizedException()
                 client.headers = self._get_headers()
                 client.headers.update(headers)
 
-                res = client.post(endpoint
-                    , content=content, json=data, timeout=self.timeout)
+                res = client.post(endpoint,
+                    content=content, json=data, timeout=self.timeout)
+                if res.status_code == 401:
+                    # Means the refresh failed, throw an unauthorized exception
+                    raise UnauthorizedException()
             res.raise_for_status()
         finally:
             client.close()
@@ -251,12 +255,16 @@ class KeurigApi:
             res = await client.post(endpoint
                 , content=content, json=data, timeout=self.timeout)
             if res.status_code == 401:
-                await self._async_refresh_token()
+                if not await self._async_refresh_token():
+                    raise UnauthorizedException()
                 client.headers = self._get_headers()
                 client.headers.update(headers)
 
-                res = await client.post(endpoint
-                    , content=content, json=data, timeout=self.timeout)
+                res = await client.post(endpoint,
+                    content=content, json=data, timeout=self.timeout)
+                if res.status_code == 401:
+                    # Means the refresh failed, throw an unauthorized exception
+                    raise UnauthorizedException()
             res.raise_for_status()
         finally:
             await client.aclose()
@@ -280,11 +288,15 @@ class KeurigApi:
 
             res = await client.delete(endpoint, timeout=self.timeout)
             if res.status_code == 401:
-                await self._async_refresh_token()
+                if not await self._async_refresh_token():
+                    raise UnauthorizedException()
                 client.headers = self._get_headers()
                 client.headers.update(headers)
 
                 res = await client.delete(endpoint, timeout=self.timeout)
+                if res.status_code == 401:
+                    # Means the refresh failed, throw an unauthorized exception
+                    raise UnauthorizedException()
             res.raise_for_status()
         finally:
             await client.aclose()
@@ -313,12 +325,16 @@ class KeurigApi:
             res = await client.put(endpoint
                 , content=content, json=data, timeout=self.timeout)
             if res.status_code == 401:
-                await self._async_refresh_token()
+                if not await self._async_refresh_token():
+                    raise UnauthorizedException()
                 client.headers = self._get_headers()
                 client.headers.update(headers)
 
-                res = await client.put(endpoint
-                    , content=content, json=data, timeout=self.timeout)
+                res = await client.put(endpoint,
+                    content=content, json=data, timeout=self.timeout)
+                if res.status_code == 401:
+                    # Means the refresh failed, throw an unauthorized exception
+                    raise UnauthorizedException()
             res.raise_for_status()
         finally:
             await client.aclose()
@@ -341,9 +357,13 @@ class KeurigApi:
         try:
             res = client.get(endpoint, timeout=self.timeout)
             if res.status_code == 401:
-                self._async_refresh_token()
+                if not self._refresh_token():
+                    raise UnauthorizedException()
                 client.headers = self._get_headers()
                 res = client.get(endpoint, timeout=self.timeout)
+                if res.status_code == 401:
+                    # Means the refresh failed, throw an unauthorized exception
+                    raise UnauthorizedException()
             res.raise_for_status()
         finally:
             client.close()
@@ -366,9 +386,13 @@ class KeurigApi:
         try:
             res = await client.get(endpoint, timeout=self.timeout)
             if res.status_code == 401:
-                await self._async_refresh_token()
+                if not await self._async_refresh_token():
+                    raise UnauthorizedException()
                 client.headers = self._get_headers()
                 res = await client.get(endpoint, timeout=self.timeout)
+                if res.status_code == 401:
+                    # Means the refresh failed, throw an unauthorized exception
+                    raise UnauthorizedException()
             res.raise_for_status()
         finally:
             await client.aclose()
@@ -735,18 +759,10 @@ class KeurigDevice:
         if category == BrewCategory.Water:
             return "Water"
 
-
-  #"payload": "{\"category\":\"Favorite\",\"parameters\":\"{\\\"id\\\":\\\"5e00ce8b2d7f46e49e9a33d81cd69fc2\\\"}\"}",
-
-
-
     async def delete_schedule(self, schedule_id: str):
         """Delete the specified schedule"""
-        try:
-            await self._api._async_delete("api/usdm/v1/schedules/" + schedule_id)
-            return True
-        except:
-            return False
+        await self._api._async_delete("api/usdm/v1/schedules/" + schedule_id)
+        return True
 
     def register_callback(self, callback=lambda *args, **kwargs: None):
         """Adds a callback to be triggered when an event is received."""
@@ -785,9 +801,11 @@ class KeurigDevice:
             for callback in self._callbacks:
                 try:
                     callback(self)
-                except:
-                    pass
+                except Exception as err:
+                    _LOGGER.error("Callback error: " + err)
             return json_result
+        except UnauthorizedException:
+            raise
         except Exception as err:
             _LOGGER.error(err)
 
@@ -814,8 +832,13 @@ class KeurigDevice:
             for callback in self._callbacks:
                 try:
                     callback(self)
-                except:
-                    pass
+                except Exception as err:
+                    _LOGGER.error("Callback error: " + err)
             return json_result
+        except UnauthorizedException:
+            raise
         except Exception as err:
             _LOGGER.error(err)
+
+class UnauthorizedException(Exception):
+    pass
