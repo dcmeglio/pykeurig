@@ -92,7 +92,7 @@ BREW_OVER_ICE = "ICED"
 
 #Brew categories
 # Hot water
-class BrewCategory(Enum):
+class BrewCategory(str, Enum):
     Water = "WATER",
     Favorite = "FAVORITE",
     Iced = "ICED",
