@@ -461,6 +461,7 @@ class KeurigDevice:
         self._appliance_status = None
         self._brewer_status = None
         self._pod_status = None
+        self._brewer_error = None
 
     @property
     def id(self):
