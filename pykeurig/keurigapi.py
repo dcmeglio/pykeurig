@@ -108,8 +108,7 @@ class KeurigApi:
             .with_automatic_reconnect({
                 "type": "raw",
                 "keep_alive_interval": 10,
-                "reconnect_interval": 5,
-                "max_attempts": 5
+                "reconnect_interval": 5
             }).build()
         hub_connection.on("appliance-notifications",self._receive_signalr)
         hub_connection.start()
