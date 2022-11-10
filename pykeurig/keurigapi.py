@@ -837,8 +837,8 @@ class KeurigDevice:
             return json_result
         except UnauthorizedException:
             raise
-        except Exception as err:
-            _LOGGER.error(err)
+      #  except Exception as err:
+       #     _LOGGER.error(err)
 
 class UnauthorizedException(Exception):
     pass
