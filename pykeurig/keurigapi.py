@@ -205,7 +205,7 @@ class KeurigApi:
         endpoint = f"{API_URL}{request}"
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
-            self._refresh_token()
+            self._get_refresh_token()
 
         client = httpx.Client()
 
@@ -216,7 +216,7 @@ class KeurigApi:
             res = client.post(endpoint
                 , content=content, json=data, timeout=self.timeout)
             if res.status_code == 401:
-                if not self._refresh_token():
+                if not self._get_refresh_token():
                     raise UnauthorizedException()
                 client.headers = self._get_headers()
                 client.headers.update(headers)
@@ -348,7 +348,7 @@ class KeurigApi:
         endpoint = f"{API_URL}{request}"
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
-            self._refresh_token()
+            self._get_refresh_token()
 
 
         client = httpx.Client()
@@ -356,7 +356,7 @@ class KeurigApi:
         try:
             res = client.get(endpoint, timeout=self.timeout)
             if res.status_code == 401:
-                if not self._refresh_token():
+                if not self._get_refresh_token():
                     raise UnauthorizedException()
                 client.headers = self._get_headers()
                 res = client.get(endpoint, timeout=self.timeout)
@@ -423,7 +423,7 @@ class KeurigApi:
 
         return True
 
-    def _refresh_token(self):
+    def _get_refresh_token(self):
         """Retrieve a new access token synchronously using a refresh_token"""
 
         data = {'grant_type': 'refresh_token', 'client_id': CLIENT_ID, 'refresh_token': self._refresh_token}
