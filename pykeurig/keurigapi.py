@@ -460,7 +460,7 @@ class KeurigDevice:
         self._appliance_status = None
         self._brewer_status = None
         self._pod_status = None
-        self._brewer_error = None
+        self._brewer_errors = []
 
     @property
     def id(self):
@@ -498,9 +498,9 @@ class KeurigDevice:
         return self._brewer_status
 
     @property
-    def brewer_error(self):
+    def errors(self):
         """Get the device brewer error if in an error state"""
-        return self._brewer_error
+        return self._brewer_errors
 
     @property
     def pod_status(self):
@@ -791,12 +791,20 @@ class KeurigDevice:
             self._brewer_status = brew_state['value']['current']
             self._pod_status = pod_state['value']['pm_content']
             self._sw_version = sw_info['value']['appliance']
+            brewer_error_str = None
             if brew_state['value']['lock_cause'] is not None:
-                self._brewer_error = brew_state['value']['lock_cause']
+                brewer_error_str = brew_state['value']['lock_cause']
             elif brew_state['value']['error'] is not None:
-                self._brewer_error = brew_state['value']['error']
+                brewer_error_str = brew_state['value']['error']
             else:
-                self._brewer_error = None
+                brewer_error_str = None
+
+            if brewer_error_str is not None:
+                brewer_errors = brewer_error_str.split(",")
+                brewer_errors = [item.strip() for item in brewer_errors]
+                self._brewer_errors = brewer_errors
+            else:
+                self._brewer_errors = []
 
             for callback in self._callbacks:
                 try:
@@ -823,11 +831,18 @@ class KeurigDevice:
             self._brewer_status = brew_state['value']['current']
             self._pod_status = pod_state['value']['pm_content']
             if brew_state['value']['lock_cause'] is not None:
-                self._brewer_error = brew_state['value']['lock_cause']
+                brewer_error_str = brew_state['value']['lock_cause']
             elif brew_state['value']['error'] is not None:
-                self._brewer_error = brew_state['value']['error']
+                brewer_error_str = brew_state['value']['error']
             else:
-                self._brewer_error = None
+                brewer_error_str = None
+
+            if brewer_error_str is not None:
+                brewer_errors = brewer_error_str.split(",")
+                brewer_errors = [item.strip() for item in brewer_errors]
+                self._brewer_errors = brewer_errors
+            else:
+                self._brewer_errors = []
 
             for callback in self._callbacks:
                 try:
