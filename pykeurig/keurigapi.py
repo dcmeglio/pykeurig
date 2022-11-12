@@ -791,20 +791,8 @@ class KeurigDevice:
             self._brewer_status = brew_state['value']['current']
             self._pod_status = pod_state['value']['pm_content']
             self._sw_version = sw_info['value']['appliance']
-            brewer_error_str = None
-            if brew_state['value']['lock_cause'] is not None:
-                brewer_error_str = brew_state['value']['lock_cause']
-            elif brew_state['value']['error'] is not None:
-                brewer_error_str = brew_state['value']['error']
-            else:
-                brewer_error_str = None
-
-            if brewer_error_str is not None:
-                brewer_errors = brewer_error_str.split(",")
-                brewer_errors = [item.strip() for item in brewer_errors]
-                self._brewer_errors = brewer_errors
-            else:
-                self._brewer_errors = []
+            
+            self.__populate_brewer_errors(brew_state['value'])
 
             for callback in self._callbacks:
                 try:
@@ -826,23 +814,14 @@ class KeurigDevice:
             appliance_state = next((item for item in json_result if item['name'] == NODE_APPLIANCE_STATE))
             brew_state = next((item for item in json_result if item['name'] == NODE_BREW_STATE))
             pod_state = next((item for item in json_result if item['name'] == NODE_POD_STATE))
-
+            sw_info = next((item for item in json_result if item['name'] == NODE_SW_INFO))
+            self._sw_version = sw_info['value']['appliance']
+            
             self._appliance_status = appliance_state['value']['current']
             self._brewer_status = brew_state['value']['current']
             self._pod_status = pod_state['value']['pm_content']
-            if brew_state['value']['lock_cause'] is not None:
-                brewer_error_str = brew_state['value']['lock_cause']
-            elif brew_state['value']['error'] is not None:
-                brewer_error_str = brew_state['value']['error']
-            else:
-                brewer_error_str = None
 
-            if brewer_error_str is not None:
-                brewer_errors = brewer_error_str.split(",")
-                brewer_errors = [item.strip() for item in brewer_errors]
-                self._brewer_errors = brewer_errors
-            else:
-                self._brewer_errors = []
+            self.__populate_brewer_errors(brew_state['value'])
 
             for callback in self._callbacks:
                 try:
@@ -854,6 +833,24 @@ class KeurigDevice:
             raise
       #  except Exception as err:
        #     _LOGGER.error(err)
+
+    def __populate_brewer_errors(self, state):
+        """Parse any brewer errors"""
+        brewer_error_str = None
+
+        if state['lock_cause'] is not None:
+            brewer_error_str = state['lock_cause']
+        elif state['error'] is not None:
+            brewer_error_str = state['error']
+        else:
+            brewer_error_str = None
+
+        if brewer_error_str is not None:
+            brewer_errors = brewer_error_str.split(",")
+            brewer_errors = [item.strip() for item in brewer_errors]
+            self._brewer_errors = brewer_errors
+        else:
+            self._brewer_errors = []
 
 class UnauthorizedException(Exception):
     pass
