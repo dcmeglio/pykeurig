@@ -136,23 +136,19 @@ class KeurigApi:
     async def _async_get_signalr_access_token(self):
         """Gets the SignalR URL and access token asynchronously"""
         res = await self._async_get("api/clnt/v1/signalr/negotiate")
-        json_result = res.json()
-        if "accessToken" in json_result.keys():
-            self._signalr_access_token = json_result['accessToken']
-        else:
-            self._signalr_access_token = json_result['AccessToken']
-        if "url" in json_result.keys():
-            self._signalr_url = json_result['url']
-        else:
-            self._signalr_url = json_result['Url']
-        self._signalr_url = self._signalr_url.replace("https://", "wss://")
+        self.__parse_signalr_access_token_response(res.json())
+
         return self._signalr_access_token
 
     def _get_signalr_access_token(self):
         """Gets the SignalR URL and access token synchronously"""
-        
         res = self._get("api/clnt/v1/signalr/negotiate")
-        json_result = res.json()
+        self.__parse_signalr_access_token_response(res.json())
+
+        return self._signalr_access_token
+
+    def __parse_signalr_access_token_response(self, json_result):
+        """Parse the JSON response to get the SignalR connection information"""
         if "accessToken" in json_result.keys():
             self._signalr_access_token = json_result['accessToken']
         else:
@@ -162,7 +158,7 @@ class KeurigApi:
         else:
             self._signalr_url = json_result['Url']
         self._signalr_url = self._signalr_url.replace("https://", "wss://")
-        return self._signalr_access_token
+
 
     def _receive_signalr(self, args):
         """Handle processing a SignalR message"""
