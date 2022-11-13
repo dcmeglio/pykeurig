@@ -452,6 +452,11 @@ class KeurigDevice:
         self._pod_status = None
         self._pod_brand = None
         self._pod_variety = None
+        self._pod_roast_type = None
+        self._pod_is_tea = None
+        self._pod_is_iced = None
+        self._pod_is_flavored = None
+        self._pod_is_powdered = None
         self._brewer_errors = []
 
     @property
@@ -509,6 +514,31 @@ class KeurigDevice:
         """If a pod was recognized, returns the variety"""
         return self._pod_variety
 
+    @property
+    def pod_roast_type(self):
+        """If a pod was recognized, returns the roast type"""
+        return self._pod_roast_type
+
+    @property
+    def pod_is_tea(self):
+        """If a pod was recognized, return whether or not it is tea"""
+        return self._pod_is_tea
+
+    @property
+    def pod_is_iced(self):
+        """If a pod was recognized, return whether or not it is iced"""
+        return self._pod_is_iced
+
+    @property
+    def pod_is_flavored(self):
+        """If a pod was recognized, return whether or not it is flavored"""
+        return self._pod_is_flavored
+
+    @property
+    def pod_is_powdered(self):
+        """If a pod was recognized, return whether or not it is powdered"""
+        return self._pod_is_powdered
+        
     async def power_on(self):
         """Turn the device on"""
         await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_ON})
@@ -868,10 +898,17 @@ class KeurigDevice:
                 self._pod_brand = None
             if "variety" in state['pod_details'] and state['pod_details']['variety'] is not None:
                 self._pod_variety = state['pod_details']['variety'][variety_key]
+                self._pod_roast_type = state['pod_details']['variety']['roast']
+                self._pod_is_tea = state['pod_details']['variety']['is_tea']
+                self._pod_is_iced = state['pod_details']['variety']['is_iced']
+                self._pod_is_flavored = state['pod_details']['variety']['is_flavored']
+                self._pod_is_powdered = state['pod_details']['variety']['is_powdered']
             else:
                 self._pod_variety = None
+                self._pod_is_tea = self._pod_is_iced = self._pod_is_flavored = self._pod_is_powdered = None
         else:
-            self._pod_brand = self._pod_variety = None
+            self._pod_brand = self._pod_variety = self._pod_roast_type = None
+            self._pod_is_tea = self._pod_is_iced = self._pod_is_flavored = self._pod_is_powdered = None
 
 class UnauthorizedException(Exception):
     pass
