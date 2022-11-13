@@ -22,12 +22,14 @@ from pykeurig.const import (API_URL, BREW_COFFEE,
 _LOGGER = logging.getLogger(__name__)
 
 class KeurigApi:
-    def __init__(self, timeout = 10):
+    def __init__(self, timeout: int = 10, locale: str ="us", language: str ="en"):
         self._access_token = None
         self._token_expires_at = None
         self._refresh_token = None
         self._customer_id = None
-        self.timeout = timeout
+        self._timeout = timeout
+        self.locale = locale
+        self.language = language
 
     async def login(self, email: str, password: str):
         """Logs you into the Keurig API"""
@@ -38,7 +40,7 @@ class KeurigApi:
             client.headers.update({'Accept-Encoding': 'identity'})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
-            res = await client.post(endpoint, json=data, timeout=self.timeout)
+            res = await client.post(endpoint, json=data, timeout=self._timeout)
             res.raise_for_status()
 
             json_result = res.json()
@@ -127,8 +129,7 @@ class KeurigApi:
             .with_automatic_reconnect({
                 "type": "raw",
                 "keep_alive_interval": 10,
-                "reconnect_interval": 5,
-                "max_attempts": 5
+                "reconnect_interval": 5
             }).build()
         hub_connection.on("appliance-notifications",self._receive_signalr)
         hub_connection.start()
@@ -214,7 +215,7 @@ class KeurigApi:
             client.headers.update(headers)
 
             res = client.post(endpoint
-                , content=content, json=data, timeout=self.timeout)
+                , content=content, json=data, timeout=self._timeout)
             if res.status_code == 401:
                 if not self._get_refresh_token():
                     raise UnauthorizedException()
@@ -222,7 +223,7 @@ class KeurigApi:
                 client.headers.update(headers)
 
                 res = client.post(endpoint,
-                    content=content, json=data, timeout=self.timeout)
+                    content=content, json=data, timeout=self._timeout)
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -252,7 +253,7 @@ class KeurigApi:
             client.headers.update(headers)
 
             res = await client.post(endpoint
-                , content=content, json=data, timeout=self.timeout)
+                , content=content, json=data, timeout=self._timeout)
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
@@ -260,7 +261,7 @@ class KeurigApi:
                 client.headers.update(headers)
 
                 res = await client.post(endpoint,
-                    content=content, json=data, timeout=self.timeout)
+                    content=content, json=data, timeout=self._timeout)
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -285,14 +286,14 @@ class KeurigApi:
             client.headers = self._get_headers()
             client.headers.update(headers)
 
-            res = await client.delete(endpoint, timeout=self.timeout)
+            res = await client.delete(endpoint, timeout=self._timeout)
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
                 client.headers = self._get_headers()
                 client.headers.update(headers)
 
-                res = await client.delete(endpoint, timeout=self.timeout)
+                res = await client.delete(endpoint, timeout=self._timeout)
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -322,7 +323,7 @@ class KeurigApi:
             client.headers.update(headers)
 
             res = await client.put(endpoint
-                , content=content, json=data, timeout=self.timeout)
+                , content=content, json=data, timeout=self._timeout)
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
@@ -330,7 +331,7 @@ class KeurigApi:
                 client.headers.update(headers)
 
                 res = await client.put(endpoint,
-                    content=content, json=data, timeout=self.timeout)
+                    content=content, json=data, timeout=self._timeout)
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -354,12 +355,12 @@ class KeurigApi:
         client = httpx.Client()
         client.headers = self._get_headers()
         try:
-            res = client.get(endpoint, timeout=self.timeout)
+            res = client.get(endpoint, timeout=self._timeout)
             if res.status_code == 401:
                 if not self._get_refresh_token():
                     raise UnauthorizedException()
                 client.headers = self._get_headers()
-                res = client.get(endpoint, timeout=self.timeout)
+                res = client.get(endpoint, timeout=self._timeout)
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -383,12 +384,12 @@ class KeurigApi:
         client = httpx.AsyncClient()
         client.headers = self._get_headers()
         try:
-            res = await client.get(endpoint, timeout=self.timeout)
+            res = await client.get(endpoint, timeout=self._timeout)
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
                 client.headers = self._get_headers()
-                res = await client.get(endpoint, timeout=self.timeout)
+                res = await client.get(endpoint, timeout=self._timeout)
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -409,7 +410,7 @@ class KeurigApi:
             client.headers.update({'Accept-Encoding': 'identity'})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
-            res = await client.post(endpoint, json=data, timeout=self.timeout)
+            res = await client.post(endpoint, json=data, timeout=self._timeout)
             res.raise_for_status()
 
             json_result = res.json()
@@ -434,7 +435,7 @@ class KeurigApi:
             client.headers.update({'Accept-Encoding': 'identity'})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
-            res = client.post(endpoint, json=data, timeout=self.timeout)
+            res = client.post(endpoint, json=data, timeout=self._timeout)
             res.raise_for_status()
 
             json_result = res.json()
@@ -460,6 +461,8 @@ class KeurigDevice:
         self._appliance_status = None
         self._brewer_status = None
         self._pod_status = None
+        self._pod_brand = None
+        self._pod_variety = None
         self._brewer_errors = []
 
     @property
@@ -506,6 +509,16 @@ class KeurigDevice:
     def pod_status(self):
         """Get the device pod status"""
         return self._pod_status
+
+    @property 
+    def pod_brand(self):
+        """If a pod was recognized, returns the brand"""
+        return self._pod_brand
+
+    @property
+    def pod_variety(self):
+        """If a pod was recognized, returns the variety"""
+        return self._pod_variety
 
     async def power_on(self):
         """Turn the device on"""
@@ -643,7 +656,7 @@ class KeurigDevice:
             return None
 
     async def add_schedule(self, name: str, enabled: bool, repeat: bool, time_val: time.struct_time, days: DaysOfWeek, brew_type: BrewCategory,
-        recommended = False, favorite_id = None, size: Size = None, temperature: Temperature = None, intensity: Intensity = None):
+        favorite_id = None, size: Size = None, temperature: Temperature = None, intensity: Intensity = None):
         """Create a new schedule"""
         offset = int((time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)/60)
         if brew_type == BrewCategory.Favorite:
@@ -686,7 +699,7 @@ class KeurigDevice:
         await self._api._async_post("api/usdm/v1/schedules", data=schedule_obj)
 
     async def update_schedule(self, schedule_id: str, name: str, enabled: bool, repeat: bool, time_val: time.struct_time, days: DaysOfWeek, brew_type: BrewCategory,
-        recommended = False, favorite_id = None, size: Size = None, temperature: Temperature = None, intensity: Intensity = None):
+        favorite_id = None, size: Size = None, temperature: Temperature = None, intensity: Intensity = None):
         """Update an existing schedule"""
         offset = int((time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)/60)
         if brew_type == BrewCategory.Favorite:
@@ -789,9 +802,9 @@ class KeurigDevice:
 
             self._appliance_status = appliance_state['value']['current']
             self._brewer_status = brew_state['value']['current']
-            self._pod_status = pod_state['value']['pm_content']
             self._sw_version = sw_info['value']['appliance']
             
+            self.__populate_pod_information(pod_state['value'])
             self.__populate_brewer_errors(brew_state['value'])
 
             for callback in self._callbacks:
@@ -815,12 +828,13 @@ class KeurigDevice:
             brew_state = next((item for item in json_result if item['name'] == NODE_BREW_STATE))
             pod_state = next((item for item in json_result if item['name'] == NODE_POD_STATE))
             sw_info = next((item for item in json_result if item['name'] == NODE_SW_INFO))
-            self._sw_version = sw_info['value']['appliance']
             
             self._appliance_status = appliance_state['value']['current']
             self._brewer_status = brew_state['value']['current']
             self._pod_status = pod_state['value']['pm_content']
+            self._sw_version = sw_info['value']['appliance']
 
+            self.__populate_pod_information(pod_state['value'])
             self.__populate_brewer_errors(brew_state['value'])
 
             for callback in self._callbacks:
@@ -846,11 +860,29 @@ class KeurigDevice:
             brewer_error_str = None
 
         if brewer_error_str is not None:
+            #If there are multiple errors they are sent as a comma separated list which we parse into an array
             brewer_errors = brewer_error_str.split(",")
             brewer_errors = [item.strip() for item in brewer_errors]
             self._brewer_errors = brewer_errors
         else:
             self._brewer_errors = []
+
+    def __populate_pod_information(self, state):
+        """Pull information about the loaded pod"""
+        brand_key = "brand_name_" + self._api.locale
+        variety_key = "variety_name_" + self._api.language + "_" + self._api.locale
+        self._pod_status = state['pm_content']
+        if "pod_details" in state and state["pod_details"] is not None:
+            if "brand" in state['pod_details'] and state['pod_details']['brand'] is not None:
+                self._pod_brand = state['pod_details']['brand'][brand_key]
+            else:
+                self._pod_brand = None
+            if "variety" in state['pod_details'] and state['pod_details']['variety'] is not None:
+                self._pod_variety = state['pod_details']['variety'][variety_key]
+            else:
+                self._pod_variety = None
+        else:
+            self._pod_brand = self._pod_variety = None
 
 class UnauthorizedException(Exception):
     pass
