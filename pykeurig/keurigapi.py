@@ -1,10 +1,9 @@
-import asyncio
 import json
 import logging
 import time
 from tzlocal import get_localzone
 
-from typing import Callable, Dict, Hashable, Optional, Tuple
+from typing import Dict, Optional
 import uuid
 
 import httpx
@@ -15,7 +14,7 @@ from pykeurig.const import (API_URL, BREW_COFFEE,
     BREW_HOT_WATER, BREW_OVER_ICE, BREWER_STATUS_READY, CLIENT_ID, COMMAND_NAME_BREW, 
     COMMAND_NAME_CANCEL_BREW, COMMAND_NAME_OFF, COMMAND_NAME_ON, FAVORITE_BREW_MODE, FAVORITE_MODEL_NAME, 
     HEADER_OCP_SUBSCRIPTION_KEY, HEADER_USER_AGENT, NODE_APPLIANCE_STATE, 
-    NODE_BREW_STATE, NODE_POD_STATE, NODE_SW_INFO, POD_STATUS_EMPTY, STATUS_ON, BrewCategory, DaysOfWeek, 
+    NODE_BREW_STATE, NODE_POD_STATE, NODE_SW_INFO, POD_STATUS_EMPTY, BrewCategory, DaysOfWeek, 
     Intensity, Size, Temperature)
 
 
@@ -36,8 +35,7 @@ class KeurigApi:
         try:
             data = {'grant_type': 'password', 'client_id': CLIENT_ID, 'username': email, 'password': password}
             client = httpx.AsyncClient()
-            client.headers = self._get_headers()
-            client.headers.update({'Accept-Encoding': 'identity'})
+            client.headers = self._get_headers({'Accept-Encoding': 'identity'})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
             res = await client.post(endpoint, json=data, timeout=self._timeout)
@@ -182,7 +180,7 @@ class KeurigApi:
             if device is not None:
                 device._update_properties()
    
-    def _get_headers(self):
+    def _get_headers(self, extra_headers = None):
         """Gets the default set of headers to pass to requests."""
         headers = {
             'User-Agent': HEADER_USER_AGENT,
@@ -192,6 +190,9 @@ class KeurigApi:
         }
         if self._access_token is not None:
             headers['Authorization'] = 'Bearer ' + self._access_token
+
+        if extra_headers is not None:
+            headers.update(extra_headers)
 
         return headers
 
@@ -211,16 +212,14 @@ class KeurigApi:
         client = httpx.Client()
 
         try:
-            client.headers = self._get_headers()
-            client.headers.update(headers)
+            client.headers = self._get_headers(headers)
 
             res = client.post(endpoint
                 , content=content, json=data, timeout=self._timeout)
             if res.status_code == 401:
                 if not self._get_refresh_token():
                     raise UnauthorizedException()
-                client.headers = self._get_headers()
-                client.headers.update(headers)
+                client.headers = self._get_headers(headers)
 
                 res = client.post(endpoint,
                     content=content, json=data, timeout=self._timeout)
@@ -249,16 +248,14 @@ class KeurigApi:
         client = httpx.AsyncClient()
 
         try:
-            client.headers = self._get_headers()
-            client.headers.update(headers)
+            client.headers = self._get_headers(headers)
 
             res = await client.post(endpoint
                 , content=content, json=data, timeout=self._timeout)
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
-                client.headers = self._get_headers()
-                client.headers.update(headers)
+                client.headers = self._get_headers(headers)
 
                 res = await client.post(endpoint,
                     content=content, json=data, timeout=self._timeout)
@@ -283,15 +280,13 @@ class KeurigApi:
         client = httpx.AsyncClient()
 
         try:
-            client.headers = self._get_headers()
-            client.headers.update(headers)
+            client.headers = self._get_headers(headers)
 
             res = await client.delete(endpoint, timeout=self._timeout)
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
-                client.headers = self._get_headers()
-                client.headers.update(headers)
+                client.headers = self._get_headers(headers)
 
                 res = await client.delete(endpoint, timeout=self._timeout)
                 if res.status_code == 401:
@@ -319,16 +314,14 @@ class KeurigApi:
         client = httpx.AsyncClient()
 
         try:
-            client.headers = self._get_headers()
-            client.headers.update(headers)
+            client.headers = self._get_headers(headers)
 
             res = await client.put(endpoint
                 , content=content, json=data, timeout=self._timeout)
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
-                client.headers = self._get_headers()
-                client.headers.update(headers)
+                client.headers = self._get_headers(headers)
 
                 res = await client.put(endpoint,
                     content=content, json=data, timeout=self._timeout)
@@ -350,7 +343,6 @@ class KeurigApi:
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
             self._get_refresh_token()
-
 
         client = httpx.Client()
         client.headers = self._get_headers()
@@ -380,7 +372,6 @@ class KeurigApi:
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
             await self._async_refresh_token()
 
-
         client = httpx.AsyncClient()
         client.headers = self._get_headers()
         try:
@@ -406,8 +397,7 @@ class KeurigApi:
 
         client = httpx.AsyncClient()
         try:
-            client.headers = self._get_headers()
-            client.headers.update({'Accept-Encoding': 'identity'})
+            client.headers = self._get_headers({'Accept-Encoding': 'identity'})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
             res = await client.post(endpoint, json=data, timeout=self._timeout)
@@ -431,8 +421,7 @@ class KeurigApi:
 
         client = httpx.Client()
         try:
-            client.headers = self._get_headers()
-            client.headers.update({'Accept-Encoding': 'identity'})
+            client.headers = self._get_headers({'Accept-Encoding': 'identity'})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
             res = client.post(endpoint, json=data, timeout=self._timeout)
@@ -450,7 +439,7 @@ class KeurigApi:
         return True
 
 class KeurigDevice:
-    def __init__(self, api: KeurigApi, id, serial, model, name):
+    def __init__(self, api: KeurigApi, id: str, serial: str, model: str, name: str):
         self._callbacks = []
         self._api = api
         self._name = name
@@ -848,7 +837,7 @@ class KeurigDevice:
       #  except Exception as err:
        #     _LOGGER.error(err)
 
-    def __populate_brewer_errors(self, state):
+    def __populate_brewer_errors(self, state: dict):
         """Parse any brewer errors"""
         brewer_error_str = None
 
@@ -867,7 +856,7 @@ class KeurigDevice:
         else:
             self._brewer_errors = []
 
-    def __populate_pod_information(self, state):
+    def __populate_pod_information(self, state: dict):
         """Pull information about the loaded pod"""
         brand_key = "brand_name_" + self._api.locale
         variety_key = "variety_name_" + self._api.language + "_" + self._api.locale
