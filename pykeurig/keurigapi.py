@@ -460,6 +460,8 @@ class KeurigDevice:
         self._pod_status = None
         self._pod_brand = None
         self._pod_variety = None
+        self._pod_brand_id = None
+        self._pod_variety_id = None
         self._pod_roast_type = None
         self._pod_is_tea = None
         self._pod_is_iced = None
@@ -518,9 +520,19 @@ class KeurigDevice:
         return self._pod_brand
 
     @property
+    def pod_brand_id(self):
+        """If a pod was recognized, returns the brand id"""
+        return self._pod_brand_id
+
+    @property
     def pod_variety(self):
         """If a pod was recognized, returns the variety"""
         return self._pod_variety
+
+    @property
+    def pod_variety_id(self):
+        """If a pod was recognized, returns the variety id"""
+        return self._pod_variety_id
 
     @property
     def pod_roast_type(self):
@@ -902,10 +914,13 @@ class KeurigDevice:
         if "pod_details" in state and state["pod_details"] is not None:
             if "brand" in state['pod_details'] and state['pod_details']['brand'] is not None:
                 self._pod_brand = state['pod_details']['brand'][brand_key]
+                self._pod_brand_id = state['pod_details']['brand']['brand_id']
             else:
                 self._pod_brand = None
+                self._pod_brand_id = None
             if "variety" in state['pod_details'] and state['pod_details']['variety'] is not None:
                 self._pod_variety = state['pod_details']['variety'][variety_key]
+                self._pod_variety_id = state['pod_details']['variety']['variety_id']
                 self._pod_roast_type = state['pod_details']['variety']['roast']
                 self._pod_is_tea = state['pod_details']['variety']['is_tea']
                 self._pod_is_iced = state['pod_details']['variety']['is_iced']
@@ -913,9 +928,10 @@ class KeurigDevice:
                 self._pod_is_powdered = state['pod_details']['variety']['is_powdered']
             else:
                 self._pod_variety = None
+                self._pod_variety_id = None
                 self._pod_is_tea = self._pod_is_iced = self._pod_is_flavored = self._pod_is_powdered = None
         else:
-            self._pod_brand = self._pod_variety = self._pod_roast_type = None
+            self._pod_brand = self._pod_variety = self._pod_roast_type = self._pod_brand_id = self._pod_variety_id = None
             self._pod_is_tea = self._pod_is_iced = self._pod_is_flavored = self._pod_is_powdered = None
 
 class UnauthorizedException(Exception):
