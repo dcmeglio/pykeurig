@@ -133,6 +133,17 @@ class KeurigApi:
         hub_connection.start()
         return True
 
+    async def async_get_brand_image(self, brand_id):
+        """Get the logo image for a brand"""
+        res = await self._async_get(f"api/pldm/v1/resources/brandlogos_us/-10/{brand_id}.png")
+        return res.content
+        
+
+    async def async_get_variety_image(self, variety_id):
+        """Get the logo image for a variety"""
+        res = await self._async_get(f"api/pldm/v1/resources/herolids_us/-10/{variety_id}.png")
+        return res.content
+
     async def _async_get_signalr_access_token(self):
         """Gets the SignalR URL and access token asynchronously"""
         res = await self._async_get("api/clnt/v1/signalr/negotiate")
@@ -159,13 +170,14 @@ class KeurigApi:
             self._signalr_url = json_result['Url']
         self._signalr_url = self._signalr_url.replace("https://", "wss://")
 
-
     def _receive_signalr(self, args):
         """Handle processing a SignalR message"""
         if args is not None and len(args)>0:
             msg = args[0]
             device_id = msg['deviceId']
             body = msg['body']
+
+            print(msg)
 
             #It will be immediately followed by a BrewStateChange so no need to trigger two updates
             if msg['eventType'] == 'ApplianceStateChange' and body['current'] == 'BREW':
