@@ -1,27 +1,52 @@
+"""Provides access to the Keurig SMART APIs."""
+# pylint: disable=protected-access, broad-except, too-many-lines
 import json
 import logging
 import time
-from tzlocal import get_localzone
-
 from typing import Dict, Optional
 import uuid
+from tzlocal import get_localzone
+
 
 import httpx
 
 from signalrcore.hub_connection_builder import HubConnectionBuilder
 
-from pykeurig.const import (API_URL, BREW_COFFEE, 
-    BREW_HOT_WATER, BREW_OVER_ICE, BREWER_STATUS_READY, CLIENT_ID, COMMAND_NAME_BREW, 
-    COMMAND_NAME_CANCEL_BREW, COMMAND_NAME_OFF, COMMAND_NAME_ON, FAVORITE_BREW_MODE, FAVORITE_MODEL_NAME, 
-    HEADER_OCP_SUBSCRIPTION_KEY, HEADER_USER_AGENT, NODE_APPLIANCE_STATE, 
-    NODE_BREW_STATE, NODE_POD_STATE, NODE_SW_INFO, POD_STATUS_EMPTY, BrewCategory, DaysOfWeek, 
-    Intensity, Size, Temperature)
+from pykeurig.const import (
+    API_URL,
+    BREW_COFFEE,
+    BREW_HOT_WATER,
+    BREW_OVER_ICE,
+    BREWER_STATUS_READY,
+    CLIENT_ID,
+    COMMAND_NAME_BREW,
+    COMMAND_NAME_CANCEL_BREW,
+    COMMAND_NAME_OFF,
+    COMMAND_NAME_ON,
+    FAVORITE_BREW_MODE,
+    FAVORITE_MODEL_NAME,
+    HEADER_OCP_SUBSCRIPTION_KEY,
+    HEADER_USER_AGENT,
+    NODE_APPLIANCE_STATE,
+    NODE_BREW_STATE,
+    NODE_POD_STATE,
+    NODE_SW_INFO,
+    POD_STATUS_EMPTY,
+    BrewCategory,
+    DaysOfWeek,
+    Intensity,
+    Size,
+    Temperature,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class KeurigApi:
-    def __init__(self, timeout: int = 10, locale: str ="us", language: str ="en"):
+    """Provide access to the Keurig SMART API."""
+
+    def __init__(self, timeout: int = 10, locale: str = "us", language: str = "en"):
         self._access_token = None
         self._token_expires_at = None
         self._refresh_token = None
@@ -29,13 +54,21 @@ class KeurigApi:
         self._timeout = timeout
         self.locale = locale
         self.language = language
+        self._signalr_access_token = None
+        self._signalr_url = None
+        self._devices = None
 
     async def login(self, email: str, password: str):
         """Logs you into the Keurig API"""
         try:
-            data = {'grant_type': 'password', 'client_id': CLIENT_ID, 'username': email, 'password': password}
+            data = {
+                "grant_type": "password",
+                "client_id": CLIENT_ID,
+                "username": email,
+                "password": password,
+            }
             client = httpx.AsyncClient()
-            client.headers = self._get_headers({'Accept-Encoding': 'identity'})
+            client.headers = self._get_headers({"Accept-Encoding": "identity"})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
             res = await client.post(endpoint, json=data, timeout=self._timeout)
@@ -43,10 +76,10 @@ class KeurigApi:
 
             json_result = res.json()
 
-            self._access_token = json_result['access_token']
-            self._token_expires_at = time.time() + json_result['expires_in'] - 120
-            self._refresh_token = json_result['refresh_token']
-        except:
+            self._access_token = json_result["access_token"]
+            self._token_expires_at = time.time() + json_result["expires_in"] - 120
+            self._refresh_token = json_result["refresh_token"]
+        except Exception:
             return False
         finally:
             await client.aclose()
@@ -57,7 +90,7 @@ class KeurigApi:
         res = await self._async_get("api/usdm/v1/user/profile")
         json_result = res.json()
 
-        self._customer_id = json_result['customerID']
+        self._customer_id = json_result["customerID"]
         return json_result
 
     async def async_get_devices(self):
@@ -65,24 +98,61 @@ class KeurigApi:
         # If we don't already have the customer details, get it
         if self._customer_id is None:
             await self.async_get_customer()
-        res = await self._async_get("api/alcm/v1/devices?customerId="+ self._customer_id)
+        res = await self._async_get(
+            "api/alcm/v1/devices?customerId=" + self._customer_id
+        )
         json_result = res.json()
 
         self._devices = []
-        for device in json_result['devices']:
-            self._devices.append(KeurigDevice(self, device['id'], device['serialNumber'], device['model'], device['registration']['name']))
+        for device in json_result["devices"]:
+            self._devices.append(
+                KeurigDevice(
+                    self,
+                    device["id"],
+                    device["serialNumber"],
+                    device["model"],
+                    device["registration"]["name"],
+                )
+            )
 
         return self._devices
 
-    async def async_add_favorite(self, name: str, size: Size, temperature: Temperature, intensity: Intensity):
+    async def async_add_favorite(
+        self, name: str, size: Size, temperature: Temperature, intensity: Intensity
+    ):
         """Add a favorite"""
-        await self._async_post("api/usdm/v1/presets", data={'name': name, 'size': int(size), 'temperature': int(temperature), 
-            'flowRate': int(intensity), 'brewMode': FAVORITE_BREW_MODE, 'deviceModel': FAVORITE_MODEL_NAME})
+        await self._async_post(
+            "api/usdm/v1/presets",
+            data={
+                "name": name,
+                "size": int(size),
+                "temperature": int(temperature),
+                "flowRate": int(intensity),
+                "brewMode": FAVORITE_BREW_MODE,
+                "deviceModel": FAVORITE_MODEL_NAME,
+            },
+        )
 
-    async def async_update_favorite(self, id: str, name: str, size: Size, temperature: Temperature, intensity: Intensity):
+    async def async_update_favorite(
+        self,
+        favorite_id: str,
+        name: str,
+        size: Size,
+        temperature: Temperature,
+        intensity: Intensity,
+    ):
         """Update a favorite"""
-        await self._async_put("api/usdm/v1/presets/" + id, data={'name': name, 'size': int(size), 'temperature': int(temperature), 
-            'flowRate': int(intensity), 'brewMode': FAVORITE_BREW_MODE, 'deviceModel': FAVORITE_MODEL_NAME})
+        await self._async_put(
+            "api/usdm/v1/presets/" + favorite_id,
+            data={
+                "name": name,
+                "size": int(size),
+                "temperature": int(temperature),
+                "flowRate": int(intensity),
+                "brewMode": FAVORITE_BREW_MODE,
+                "deviceModel": FAVORITE_MODEL_NAME,
+            },
+        )
 
     async def async_get_favorites(self):
         """Retrieves the list of favorites from the API"""
@@ -96,52 +166,59 @@ class KeurigApi:
         await self._async_delete("api/usdm/v1/presets/" + favorite_id)
 
     async def async_connect(self):
-        """Establishes a connection to the SignalR server to receive real-time push notifications."""
+        """Establish a connection to the SignalR server to receive real-time push notifications."""
 
         # We need to do this to get the URL
         await self._async_get_signalr_access_token()
-        
-        hub_connection = HubConnectionBuilder()\
-            .with_url(self._signalr_url, options={
-                "access_token_factory": self._get_signalr_access_token
-            })\
-            .with_automatic_reconnect({
-                "type": "raw",
-                "keep_alive_interval": 10,
-                "reconnect_interval": 5
-            }).build()
-        hub_connection.on("appliance-notifications",self._receive_signalr)
+
+        hub_connection = (
+            HubConnectionBuilder()
+            .with_url(
+                self._signalr_url,
+                options={"access_token_factory": self._get_signalr_access_token},
+            )
+            .with_automatic_reconnect(
+                {"type": "raw", "keep_alive_interval": 10, "reconnect_interval": 5}
+            )
+            .build()
+        )
+        hub_connection.on("appliance-notifications", self._receive_signalr)
         hub_connection.start()
         return True
 
     def connect(self):
-        """Establishes a connection to the SignalR server to receive real-time push notifications."""
+        """Establish a connection to the SignalR server to receive real-time push notifications."""
 
         # We need to do this to get the URL
         self._get_signalr_access_token()
-        
-        hub_connection = HubConnectionBuilder()\
-            .with_url(self._signalr_url, options={
-                "access_token_factory": self._get_signalr_access_token
-            })\
-            .with_automatic_reconnect({
-                "type": "raw",
-                "keep_alive_interval": 10,
-                "reconnect_interval": 5
-            }).build()
-        hub_connection.on("appliance-notifications",self._receive_signalr)
+
+        hub_connection = (
+            HubConnectionBuilder()
+            .with_url(
+                self._signalr_url,
+                options={"access_token_factory": self._get_signalr_access_token},
+            )
+            .with_automatic_reconnect(
+                {"type": "raw", "keep_alive_interval": 10, "reconnect_interval": 5}
+            )
+            .build()
+        )
+        hub_connection.on("appliance-notifications", self._receive_signalr)
         hub_connection.start()
         return True
 
     async def async_get_brand_image(self, brand_id):
         """Get the logo image for a brand"""
-        res = await self._async_get(f"api/pldm/v1/resources/brandlogos_us/-10/{brand_id}.png")
+        res = await self._async_get(
+            f"api/pldm/v1/resources/brandlogos_us/-10/{brand_id}.png"
+        )
         return res.content
-        
 
     async def async_get_variety_image(self, variety_id):
         """Get the logo image for a variety"""
-        res = await self._async_get(f"api/pldm/v1/resources/herolids_us/-10/{variety_id}.png")
+        res = await self._async_get(
+            f"api/pldm/v1/resources/herolids_us/-10/{variety_id}.png"
+        )
         return res.content
 
     async def _async_get_signalr_access_token(self):
@@ -161,57 +238,61 @@ class KeurigApi:
     def __parse_signalr_access_token_response(self, json_result):
         """Parse the JSON response to get the SignalR connection information"""
         if "accessToken" in json_result.keys():
-            self._signalr_access_token = json_result['accessToken']
+            self._signalr_access_token = json_result["accessToken"]
         else:
-            self._signalr_access_token = json_result['AccessToken']
+            self._signalr_access_token = json_result["AccessToken"]
         if "url" in json_result.keys():
-            self._signalr_url = json_result['url']
+            self._signalr_url = json_result["url"]
         else:
-            self._signalr_url = json_result['Url']
+            self._signalr_url = json_result["Url"]
         self._signalr_url = self._signalr_url.replace("https://", "wss://")
 
     def _receive_signalr(self, args):
         """Handle processing a SignalR message"""
-        if args is not None and len(args)>0:
+        if args is not None and len(args) > 0:
             msg = args[0]
-            device_id = msg['deviceId']
-            body = msg['body']
+            device_id = msg["deviceId"]
+            body = msg["body"]
 
             print(msg)
 
-            #It will be immediately followed by a BrewStateChange so no need to trigger two updates
-            if msg['eventType'] == 'ApplianceStateChange' and body['current'] == 'BREW':
+            # It will be immediately followed by a BrewStateChange so no need to trigger two updates
+            if msg["eventType"] == "ApplianceStateChange" and body["current"] == "BREW":
                 return
 
             # Find the matching device and update its data
-            device = next((device for device in self._devices if device.id == device_id))
+            device = next(
+                (device for device in self._devices if device.id == device_id)
+            )
             if device is not None:
                 device._update_properties()
-   
-    def _get_headers(self, extra_headers = None):
+
+    def _get_headers(self, extra_headers=None):
         """Gets the default set of headers to pass to requests."""
         headers = {
-            'User-Agent': HEADER_USER_AGENT,
-            'Ocp-Apim-Subscription-Key': HEADER_OCP_SUBSCRIPTION_KEY,
-            'Content-Type': 'application/json',     
-            'reqId': str(uuid.uuid4())    
+            "User-Agent": HEADER_USER_AGENT,
+            "Ocp-Apim-Subscription-Key": HEADER_OCP_SUBSCRIPTION_KEY,
+            "Content-Type": "application/json",
+            "reqId": str(uuid.uuid4()),
         }
         if self._access_token is not None:
-            headers['Authorization'] = 'Bearer ' + self._access_token
+            headers["Authorization"] = "Bearer " + self._access_token
 
         if extra_headers is not None:
             headers.update(extra_headers)
 
         return headers
 
-    def _post(self,
-            request: str,
-            content: Optional[bytes] = None,
-            data: Optional[Dict] = None,
-            headers: Optional[Dict] = None) -> httpx.Response:
+    def _post(
+        self,
+        request: str,
+        content: Optional[bytes] = None,
+        data: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
+    ) -> httpx.Response:
 
         """Call POST endpoint of Keurig API synchronously."""
-        
+
         endpoint = f"{API_URL}{request}"
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
@@ -222,15 +303,17 @@ class KeurigApi:
         try:
             client.headers = self._get_headers(headers)
 
-            res = client.post(endpoint
-                , content=content, json=data, timeout=self._timeout)
+            res = client.post(
+                endpoint, content=content, json=data, timeout=self._timeout
+            )
             if res.status_code == 401:
                 if not self._get_refresh_token():
                     raise UnauthorizedException()
                 client.headers = self._get_headers(headers)
 
-                res = client.post(endpoint,
-                    content=content, json=data, timeout=self._timeout)
+                res = client.post(
+                    endpoint, content=content, json=data, timeout=self._timeout
+                )
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -241,13 +324,14 @@ class KeurigApi:
         return res
 
     async def _async_post(
-            self,
-            request: str,
-            content: Optional[bytes] = None,
-            data: Optional[Dict] = None,
-            headers: Optional[Dict] = None) -> httpx.Response:
+        self,
+        request: str,
+        content: Optional[bytes] = None,
+        data: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
+    ) -> httpx.Response:
         """Call POST endpoint of Keurig API asynchronously."""
-        
+
         endpoint = f"{API_URL}{request}"
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
@@ -258,15 +342,17 @@ class KeurigApi:
         try:
             client.headers = self._get_headers(headers)
 
-            res = await client.post(endpoint
-                , content=content, json=data, timeout=self._timeout)
+            res = await client.post(
+                endpoint, content=content, json=data, timeout=self._timeout
+            )
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
                 client.headers = self._get_headers(headers)
 
-                res = await client.post(endpoint,
-                    content=content, json=data, timeout=self._timeout)
+                res = await client.post(
+                    endpoint, content=content, json=data, timeout=self._timeout
+                )
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -275,11 +361,10 @@ class KeurigApi:
             await client.aclose()
 
     async def _async_delete(
-            self,
-            request: str,
-            headers: Optional[Dict] = None) -> httpx.Response:
+        self, request: str, headers: Optional[Dict] = None
+    ) -> httpx.Response:
         """Call DELETE endpoint of Keurig API asynchronously."""
-        
+
         endpoint = f"{API_URL}{request}"
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
@@ -307,13 +392,14 @@ class KeurigApi:
         return res
 
     async def _async_put(
-            self,
-            request: str,
-            content: Optional[bytes] = None,
-            data: Optional[Dict] = None,
-            headers: Optional[Dict] = None) -> httpx.Response:
+        self,
+        request: str,
+        content: Optional[bytes] = None,
+        data: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
+    ) -> httpx.Response:
         """Call PUT endpoint of Keurig API asynchronously."""
-        
+
         endpoint = f"{API_URL}{request}"
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
@@ -324,15 +410,17 @@ class KeurigApi:
         try:
             client.headers = self._get_headers(headers)
 
-            res = await client.put(endpoint
-                , content=content, json=data, timeout=self._timeout)
+            res = await client.put(
+                endpoint, content=content, json=data, timeout=self._timeout
+            )
             if res.status_code == 401:
                 if not await self._async_refresh_token():
                     raise UnauthorizedException()
                 client.headers = self._get_headers(headers)
 
-                res = await client.put(endpoint,
-                    content=content, json=data, timeout=self._timeout)
+                res = await client.put(
+                    endpoint, content=content, json=data, timeout=self._timeout
+                )
                 if res.status_code == 401:
                     # Means the refresh failed, throw an unauthorized exception
                     raise UnauthorizedException()
@@ -342,11 +430,9 @@ class KeurigApi:
 
         return res
 
-    def _get(
-            self,
-            request: str) -> httpx.Response:
+    def _get(self, request: str) -> httpx.Response:
         """Call GET endpoint of Keurig API synchronously."""
-        
+
         endpoint = f"{API_URL}{request}"
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
@@ -370,11 +456,9 @@ class KeurigApi:
 
         return res
 
-    async def _async_get(
-        self,
-        request: str) -> httpx.Response:
+    async def _async_get(self, request: str) -> httpx.Response:
         """Call GET endpoint of Keurig API asynchronously."""
-        
+
         endpoint = f"{API_URL}{request}"
 
         if self._token_expires_at <= time.time() and self._token_expires_at is not None:
@@ -401,21 +485,25 @@ class KeurigApi:
     async def _async_refresh_token(self):
         """Retrieve a new access token asynchronously using a refresh_token"""
 
-        data = {'grant_type': 'refresh_token', 'client_id': CLIENT_ID, 'refresh_token': self._refresh_token}
+        data = {
+            "grant_type": "refresh_token",
+            "client_id": CLIENT_ID,
+            "refresh_token": self._refresh_token,
+        }
 
         client = httpx.AsyncClient()
         try:
-            client.headers = self._get_headers({'Accept-Encoding': 'identity'})
+            client.headers = self._get_headers({"Accept-Encoding": "identity"})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
             res = await client.post(endpoint, json=data, timeout=self._timeout)
             res.raise_for_status()
 
             json_result = res.json()
-            self._access_token = json_result['access_token']
-            self._token_expires_at = time.time() + json_result['expires_in'] - 120
-            self._refresh_token = json_result['refresh_token']
-        except:
+            self._access_token = json_result["access_token"]
+            self._token_expires_at = time.time() + json_result["expires_in"] - 120
+            self._refresh_token = json_result["refresh_token"]
+        except Exception:
             return False
         finally:
             await client.aclose()
@@ -425,33 +513,42 @@ class KeurigApi:
     def _get_refresh_token(self):
         """Retrieve a new access token synchronously using a refresh_token"""
 
-        data = {'grant_type': 'refresh_token', 'client_id': CLIENT_ID, 'refresh_token': self._refresh_token}
+        data = {
+            "grant_type": "refresh_token",
+            "client_id": CLIENT_ID,
+            "refresh_token": self._refresh_token,
+        }
 
         client = httpx.Client()
         try:
-            client.headers = self._get_headers({'Accept-Encoding': 'identity'})
+            client.headers = self._get_headers({"Accept-Encoding": "identity"})
 
             endpoint = f"{API_URL}api/v2/oauth/token"
             res = client.post(endpoint, json=data, timeout=self._timeout)
             res.raise_for_status()
 
             json_result = res.json()
-            self._access_token = json_result['access_token']
-            self._token_expires_at = time.time() + json_result['expires_in'] - 120
-            self._refresh_token = json_result['refresh_token']
-        except:
+            self._access_token = json_result["access_token"]
+            self._token_expires_at = time.time() + json_result["expires_in"] - 120
+            self._refresh_token = json_result["refresh_token"]
+        except Exception:
             return False
         finally:
             client.close()
 
         return True
 
+
 class KeurigDevice:
-    def __init__(self, api: KeurigApi, id: str, serial: str, model: str, name: str):
+    """Represents an individual Keurig brewer."""
+
+    def __init__(
+        self, api: KeurigApi, device_id: str, serial: str, model: str, name: str
+    ):
         self._callbacks = []
         self._api = api
         self._name = name
-        self._id = id
+        self._id = device_id
         self._serial = serial
         self._model = model
         self._sw_version = None
@@ -470,7 +567,7 @@ class KeurigDevice:
         self._brewer_errors = []
 
     @property
-    def id(self):
+    def id(self):  # pylint: disable=invalid-name
         """Get the device id"""
         return self._id
 
@@ -514,7 +611,7 @@ class KeurigDevice:
         """Get the device pod status"""
         return self._pod_status
 
-    @property 
+    @property
     def pod_brand(self):
         """If a pod was recognized, returns the brand"""
         return self._pod_brand
@@ -558,33 +655,47 @@ class KeurigDevice:
     def pod_is_powdered(self):
         """If a pod was recognized, return whether or not it is powdered"""
         return self._pod_is_powdered
-        
+
     async def power_on(self):
         """Turn the device on"""
-        await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_ON})
+        await self._api._async_post(
+            "api/acsm/v1/devices/" + self._id + "/commands",
+            data={"command_name": COMMAND_NAME_ON},
+        )
         return True
 
     async def power_off(self):
         """Turn the device off"""
-        await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_OFF})
+        await self._api._async_post(
+            "api/acsm/v1/devices/" + self._id + "/commands",
+            data={"command_name": COMMAND_NAME_OFF},
+        )
         return True
 
     async def hot_water(self, size: Size, temp: Temperature):
         """Brew hot water at the specified size and temperature"""
         await self._async_update_properties()
         # Must be ready, and empty
-        if self._brewer_status != BREWER_STATUS_READY or self._pod_status != POD_STATUS_EMPTY:
+        if (
+            self._brewer_status != BREWER_STATUS_READY
+            or self._pod_status != POD_STATUS_EMPTY
+        ):
             return False
 
-        await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_BREW, 'params': 
-        {
-            'size': size,
-            'brew_type': BREW_HOT_WATER,
-            'flow_rate': Intensity.Balanced,
-            'temp': temp,
-            'enhanced': True,
-            'category': BrewCategory.Water
-        }})
+        await self._api._async_post(
+            "api/acsm/v1/devices/" + self._id + "/commands",
+            data={
+                "command_name": COMMAND_NAME_BREW,
+                "params": {
+                    "size": size,
+                    "brew_type": BREW_HOT_WATER,
+                    "flow_rate": Intensity.Balanced,
+                    "temp": temp,
+                    "enhanced": True,
+                    "category": BrewCategory.Water,
+                },
+            },
+        )
         return True
 
     async def brew_hot(self, size: Size, temp: Temperature, intensity: Intensity):
@@ -592,18 +703,26 @@ class KeurigDevice:
 
         await self._async_update_properties()
         # Must be ready, and not empty
-        if self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
+        if (
+            self._brewer_status != BREWER_STATUS_READY
+            or self._pod_status == POD_STATUS_EMPTY
+        ):
             return False
 
-        await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_BREW, 'params': 
-        {
-            'size': size,
-            'brew_type': BREW_COFFEE,
-            'flow_rate': intensity,
-            'temp': temp,
-            'enhanced': True,
-            'category': BrewCategory.Custom
-        }})
+        await self._api._async_post(
+            "api/acsm/v1/devices/" + self._id + "/commands",
+            data={
+                "command_name": COMMAND_NAME_BREW,
+                "params": {
+                    "size": size,
+                    "brew_type": BREW_COFFEE,
+                    "flow_rate": intensity,
+                    "temp": temp,
+                    "enhanced": True,
+                    "category": BrewCategory.Custom,
+                },
+            },
+        )
         return True
 
     async def brew_iced(self):
@@ -611,76 +730,105 @@ class KeurigDevice:
 
         await self._async_update_properties()
         # Must be ready, and not empty
-        if self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
+        if (
+            self._brewer_status != BREWER_STATUS_READY
+            or self._pod_status == POD_STATUS_EMPTY
+        ):
             return False
 
-        await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_BREW, 'params': 
-        {
-            'size': 6,
-            'brew_type': BREW_OVER_ICE,
-            'flow_rate': Intensity.BREW_INTENSE,
-            'temp': 201,
-            'enhanced': True,
-            'category': BrewCategory.Iced
-        }})
+        await self._api._async_post(
+            "api/acsm/v1/devices/" + self._id + "/commands",
+            data={
+                "command_name": COMMAND_NAME_BREW,
+                "params": {
+                    "size": 6,
+                    "brew_type": BREW_OVER_ICE,
+                    "flow_rate": Intensity.Intense,
+                    "temp": 201,
+                    "enhanced": True,
+                    "category": BrewCategory.Iced,
+                },
+            },
+        )
         return True
 
     async def brew_recommendation(self, size: Size):
         """Brew a drink at the recommended settings for the k-cup at the specified size"""
         json_result = await self._async_update_properties()
         # Must be ready, and not empty
-        if self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
+        if (
+            self._brewer_status != BREWER_STATUS_READY
+            or self._pod_status == POD_STATUS_EMPTY
+        ):
             return False
         # get recommended brew settings based on size
-        pod_state = next((item for item in json_result if item['name'] == NODE_POD_STATE))
-        recipes = pod_state['value']['pod_details']['recipes']
-        recipe = next((recipe for recipe in recipes if recipe['size'] == size))
-        temp = recipe['temp']
-        flow_rate = recipe['flow_rate']
-        
-        await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_BREW, 'params': 
-        {
-            'size': size,
-            'brew_type': BREW_COFFEE,
-            'flow_rate': flow_rate,
-            'temp': temp,
-            'enhanced': True,
-            'category': BrewCategory.Recommended
-        }})
+        pod_state = next(
+            (item for item in json_result if item["name"] == NODE_POD_STATE)
+        )
+        recipes = pod_state["value"]["pod_details"]["recipes"]
+        recipe = next((recipe for recipe in recipes if recipe["size"] == size))
+        temp = recipe["temp"]
+        flow_rate = recipe["flow_rate"]
+
+        await self._api._async_post(
+            "api/acsm/v1/devices/" + self._id + "/commands",
+            data={
+                "command_name": COMMAND_NAME_BREW,
+                "params": {
+                    "size": size,
+                    "brew_type": BREW_COFFEE,
+                    "flow_rate": flow_rate,
+                    "temp": temp,
+                    "enhanced": True,
+                    "category": BrewCategory.Recommended,
+                },
+            },
+        )
 
     async def brew_favorite(self, favorite_id: str):
         """Brew the specified favorite setting"""
         await self._async_update_properties()
         # Must be ready, and not empty
-        if self._brewer_status != BREWER_STATUS_READY or self._pod_status == POD_STATUS_EMPTY:
+        if (
+            self._brewer_status != BREWER_STATUS_READY
+            or self._pod_status == POD_STATUS_EMPTY
+        ):
             return False
 
         # get favorite
         favorites = await self._api.async_get_favorites()
 
-        favorite = next((fav for fav in favorites if fav['id'] == favorite_id))
+        favorite = next((fav for fav in favorites if fav["id"] == favorite_id))
 
         if favorite is not None:
-            size = favorite['size']
-            flow_rate = favorite['flowRate']
-            temp = favorite['temperature']
+            size = favorite["size"]
+            flow_rate = favorite["flowRate"]
+            temp = favorite["temperature"]
 
             # do brew
-            await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_BREW, 'params': 
-            {
-                'size': size,
-                'brew_type': BREW_COFFEE,
-                 'flow_rate': flow_rate,
-                 'temp': temp,
-                'enhanced': True,
-                'category': BrewCategory.Favorite
-            }})
+            await self._api._async_post(
+                "api/acsm/v1/devices/" + self._id + "/commands",
+                data={
+                    "command_name": COMMAND_NAME_BREW,
+                    "params": {
+                        "size": size,
+                        "brew_type": BREW_COFFEE,
+                        "flow_rate": flow_rate,
+                        "temp": temp,
+                        "enhanced": True,
+                        "category": BrewCategory.Favorite,
+                    },
+                },
+            )
 
     async def cancel_brew(self):
         """Cancel the current brewing."""
         try:
-            await self._api._async_post("api/acsm/v1/devices/"+self._id+"/commands", data={'command_name': COMMAND_NAME_CANCEL_BREW})
-        except:
+            await self._api._async_post(
+                "api/acsm/v1/devices/" + self._id + "/commands",
+                data={"command_name": COMMAND_NAME_CANCEL_BREW},
+            )
+        except Exception:
             return False
         return True
 
@@ -689,97 +837,127 @@ class KeurigDevice:
         try:
             res = await self._api._async_get("api/usdm/v1/schedules")
             json_result = res.json()
-            matching_schedules = list((schedule for schedule in json_result if schedule['brewer_id'] == self._id))
+            matching_schedules = list(
+                (
+                    schedule
+                    for schedule in json_result
+                    if schedule["brewer_id"] == self._id
+                )
+            )
             return matching_schedules
-        except:
+        except Exception:
             return None
 
-    async def add_schedule(self, name: str, enabled: bool, repeat: bool, time_val: time.struct_time, days: DaysOfWeek, brew_type: BrewCategory,
-        favorite_id = None, size: Size = None, temperature: Temperature = None, intensity: Intensity = None):
+    async def add_schedule(
+        self,
+        name: str,
+        enabled: bool,
+        repeat: bool,
+        time_val: time.struct_time,
+        days: DaysOfWeek,
+        brew_type: BrewCategory,
+        favorite_id=None,
+        size: Size = None,
+        temperature: Temperature = None,
+        intensity: Intensity = None,
+    ):
         """Create a new schedule"""
-        offset = int((time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)/60)
+        offset = int(
+            (time.timezone if (time.localtime().tm_isdst == 0) else time.altzone) / 60
+        )
         if brew_type == BrewCategory.Favorite:
-            payload_parameters = {
-                'id': favorite_id
-            }
+            payload_parameters = {"id": favorite_id}
         else:
             payload_parameters = {
-                'recipe_format_version': "1.0",
-                'size': int(size) if brew_type != BrewCategory.Iced else 6
+                "recipe_format_version": "1.0",
+                "size": int(size) if brew_type != BrewCategory.Iced else 6,
             }
             if brew_type == BrewCategory.Water or brew_type == BrewCategory.Custom:
-                payload_parameters['flowRate'] = int(intensity)
-                payload_parameters['temperature'] = int(temperature)
+                payload_parameters["flowRate"] = int(intensity)
+                payload_parameters["temperature"] = int(temperature)
 
         payload = {
-            'category': self._category_to_schedule_str(brew_type),
-            'parameters': json.dumps(payload_parameters)
+            "category": self._category_to_schedule_str(brew_type),
+            "parameters": json.dumps(payload_parameters),
         }
 
         schedule_obj = {
-            'id': None,
-            'version': "1.0",
-            'enabled': enabled,
-            'name': name,
-            'brewer_id': self._id,
-            'schedule_type': 'Brew',
-            'repeatable': repeat,
-            'scheduled_time': {
-                'hours': time_val.tm_hour,
-                'minutes': time_val.tm_min,
-                'offset': -offset,
-                'dst': time.localtime().tm_isdst,
-                'timezone': str(get_localzone())
+            "id": None,
+            "version": "1.0",
+            "enabled": enabled,
+            "name": name,
+            "brewer_id": self._id,
+            "schedule_type": "Brew",
+            "repeatable": repeat,
+            "scheduled_time": {
+                "hours": time_val.tm_hour,
+                "minutes": time_val.tm_min,
+                "offset": -offset,
+                "dst": time.localtime().tm_isdst,
+                "timezone": str(get_localzone()),
             },
-            'scheduled_days': self._days_flags_to_array(days),
-            'payload': json.dumps(payload)
+            "scheduled_days": self._days_flags_to_array(days),
+            "payload": json.dumps(payload),
         }
-        
+
         await self._api._async_post("api/usdm/v1/schedules", data=schedule_obj)
 
-    async def update_schedule(self, schedule_id: str, name: str, enabled: bool, repeat: bool, time_val: time.struct_time, days: DaysOfWeek, brew_type: BrewCategory,
-        favorite_id = None, size: Size = None, temperature: Temperature = None, intensity: Intensity = None):
+    async def update_schedule(
+        self,
+        schedule_id: str,
+        name: str,
+        enabled: bool,
+        repeat: bool,
+        time_val: time.struct_time,
+        days: DaysOfWeek,
+        brew_type: BrewCategory,
+        favorite_id=None,
+        size: Size = None,
+        temperature: Temperature = None,
+        intensity: Intensity = None,
+    ):
         """Update an existing schedule"""
-        offset = int((time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)/60)
+        offset = int(
+            (time.timezone if (time.localtime().tm_isdst == 0) else time.altzone) / 60
+        )
         if brew_type == BrewCategory.Favorite:
-            payload_parameters = {
-                'id': favorite_id
-            }
+            payload_parameters = {"id": favorite_id}
         else:
             payload_parameters = {
-                'recipe_format_version': "1.0",
-                'size': int(size) if brew_type != BrewCategory.Iced else 6
+                "recipe_format_version": "1.0",
+                "size": int(size) if brew_type != BrewCategory.Iced else 6,
             }
             if brew_type == BrewCategory.Water or brew_type == BrewCategory.Custom:
-                payload_parameters['flowRate'] = int(intensity)
-                payload_parameters['temperature'] = int(temperature)
+                payload_parameters["flowRate"] = int(intensity)
+                payload_parameters["temperature"] = int(temperature)
 
         payload = {
-            'category': self._category_to_schedule_str(brew_type),
-            'parameters': json.dumps(payload_parameters)
+            "category": self._category_to_schedule_str(brew_type),
+            "parameters": json.dumps(payload_parameters),
         }
 
         schedule_obj = {
-            'id': None,
-            'version': "1.0",
-            'enabled': enabled,
-            'name': name,
-            'brewer_id': self._id,
-            'schedule_type': 'Brew',
-            'repeatable': repeat,
-            'scheduled_time': {
-                'hours': time_val.tm_hour,
-                'minutes': time_val.tm_min,
-                'offset': -offset,
-                'dst': time.localtime().tm_isdst,
-                'timezone': str(get_localzone())
+            "id": None,
+            "version": "1.0",
+            "enabled": enabled,
+            "name": name,
+            "brewer_id": self._id,
+            "schedule_type": "Brew",
+            "repeatable": repeat,
+            "scheduled_time": {
+                "hours": time_val.tm_hour,
+                "minutes": time_val.tm_min,
+                "offset": -offset,
+                "dst": time.localtime().tm_isdst,
+                "timezone": str(get_localzone()),
             },
-            'scheduled_days': self._days_flags_to_array(days),
-            'payload': json.dumps(payload)
+            "scheduled_days": self._days_flags_to_array(days),
+            "payload": json.dumps(payload),
         }
-        
-        await self._api._async_put("api/usdm/v1/schedules/" + schedule_id, data=schedule_obj)
 
+        await self._api._async_put(
+            "api/usdm/v1/schedules/" + schedule_id, data=schedule_obj
+        )
 
     def _days_flags_to_array(self, days: DaysOfWeek):
         days_array = []
@@ -790,14 +968,14 @@ class KeurigDevice:
         if days & DaysOfWeek.Tuesday:
             days_array.append("Tuesday")
         if days & DaysOfWeek.Wednesday:
-            days_array.append("Wednesday")                                
+            days_array.append("Wednesday")
         if days & DaysOfWeek.Thursday:
             days_array.append("Thursday")
         if days & DaysOfWeek.Friday:
             days_array.append("Friday")
         if days & DaysOfWeek.Saturday:
             days_array.append("Saturday")
-        return days_array                                 
+        return days_array
 
     def _category_to_schedule_str(self, category: BrewCategory):
         if category == BrewCategory.Favorite:
@@ -828,29 +1006,39 @@ class KeurigDevice:
         """Update the device properties"""
         await self._async_update_properties()
 
-    async def _async_update_properties(self): 
+    async def _async_update_properties(self):
         """Asynchronously update the device properties"""
         try:
-            res = await self._api._async_get("api/acsm/v1/devices/"+self._id+"/properties")
+            res = await self._api._async_get(
+                "api/acsm/v1/devices/" + self._id + "/properties"
+            )
             json_result = res.json()
 
-            appliance_state = next((item for item in json_result if item['name'] == NODE_APPLIANCE_STATE))
-            brew_state = next((item for item in json_result if item['name'] == NODE_BREW_STATE))
-            pod_state = next((item for item in json_result if item['name'] == NODE_POD_STATE))
-            sw_info = next((item for item in json_result if item['name'] == NODE_SW_INFO))
+            appliance_state = next(
+                (item for item in json_result if item["name"] == NODE_APPLIANCE_STATE)
+            )
+            brew_state = next(
+                (item for item in json_result if item["name"] == NODE_BREW_STATE)
+            )
+            pod_state = next(
+                (item for item in json_result if item["name"] == NODE_POD_STATE)
+            )
+            sw_info = next(
+                (item for item in json_result if item["name"] == NODE_SW_INFO)
+            )
 
-            self._appliance_status = appliance_state['value']['current']
-            self._brewer_status = brew_state['value']['current']
-            self._sw_version = sw_info['value']['appliance']
-            
-            self.__populate_pod_information(pod_state['value'])
-            self.__populate_brewer_errors(brew_state['value'])
+            self._appliance_status = appliance_state["value"]["current"]
+            self._brewer_status = brew_state["value"]["current"]
+            self._sw_version = sw_info["value"]["appliance"]
+
+            self.__populate_pod_information(pod_state["value"])
+            self.__populate_brewer_errors(brew_state["value"])
 
             for callback in self._callbacks:
                 try:
                     callback(self)
                 except Exception as err:
-                    _LOGGER.error("Callback error: " + err)
+                    _LOGGER.error("Callback error: %s", err)
             return json_result
         except UnauthorizedException:
             raise
@@ -860,46 +1048,55 @@ class KeurigDevice:
     def _update_properties(self):
         """Synchronously update the device properties"""
         try:
-            res = self._api._get("api/acsm/v1/devices/"+self._id+"/properties")
+            res = self._api._get("api/acsm/v1/devices/" + self._id + "/properties")
             json_result = res.json()
 
-            appliance_state = next((item for item in json_result if item['name'] == NODE_APPLIANCE_STATE))
-            brew_state = next((item for item in json_result if item['name'] == NODE_BREW_STATE))
-            pod_state = next((item for item in json_result if item['name'] == NODE_POD_STATE))
-            sw_info = next((item for item in json_result if item['name'] == NODE_SW_INFO))
-            
-            self._appliance_status = appliance_state['value']['current']
-            self._brewer_status = brew_state['value']['current']
-            self._pod_status = pod_state['value']['pm_content']
-            self._sw_version = sw_info['value']['appliance']
+            appliance_state = next(
+                (item for item in json_result if item["name"] == NODE_APPLIANCE_STATE)
+            )
+            brew_state = next(
+                (item for item in json_result if item["name"] == NODE_BREW_STATE)
+            )
+            pod_state = next(
+                (item for item in json_result if item["name"] == NODE_POD_STATE)
+            )
+            sw_info = next(
+                (item for item in json_result if item["name"] == NODE_SW_INFO)
+            )
 
-            self.__populate_pod_information(pod_state['value'])
-            self.__populate_brewer_errors(brew_state['value'])
+            self._appliance_status = appliance_state["value"]["current"]
+            self._brewer_status = brew_state["value"]["current"]
+            self._pod_status = pod_state["value"]["pm_content"]
+            self._sw_version = sw_info["value"]["appliance"]
+
+            self.__populate_pod_information(pod_state["value"])
+            self.__populate_brewer_errors(brew_state["value"])
 
             for callback in self._callbacks:
                 try:
                     callback(self)
                 except Exception as err:
-                    _LOGGER.error("Callback error: " + err)
+                    _LOGGER.error("Callback error: %s", err)
             return json_result
         except UnauthorizedException:
             raise
-      #  except Exception as err:
-       #     _LOGGER.error(err)
+        except Exception as err:
+            _LOGGER.error(err)
 
     def __populate_brewer_errors(self, state: dict):
         """Parse any brewer errors"""
         brewer_error_str = None
 
-        if state['lock_cause'] is not None:
-            brewer_error_str = state['lock_cause']
-        elif state['error'] is not None:
-            brewer_error_str = state['error']
+        if state["lock_cause"] is not None:
+            brewer_error_str = state["lock_cause"]
+        elif state["error"] is not None:
+            brewer_error_str = state["error"]
         else:
             brewer_error_str = None
 
         if brewer_error_str is not None:
-            #If there are multiple errors they are sent as a comma separated list which we parse into an array
+            # If there are multiple errors they are sent as a comma
+            # separated list which we parse into an array
             brewer_errors = brewer_error_str.split(",")
             brewer_errors = [item.strip() for item in brewer_errors]
             self._brewer_errors = brewer_errors
@@ -910,29 +1107,42 @@ class KeurigDevice:
         """Pull information about the loaded pod"""
         brand_key = "brand_name_" + self._api.locale
         variety_key = "variety_name_" + self._api.language + "_" + self._api.locale
-        self._pod_status = state['pm_content']
+        self._pod_status = state["pm_content"]
         if "pod_details" in state and state["pod_details"] is not None:
-            if "brand" in state['pod_details'] and state['pod_details']['brand'] is not None:
-                self._pod_brand = state['pod_details']['brand'][brand_key]
-                self._pod_brand_id = state['pod_details']['brand']['brand_id']
+            if (
+                "brand" in state["pod_details"]
+                and state["pod_details"]["brand"] is not None
+            ):
+                self._pod_brand = state["pod_details"]["brand"][brand_key]
+                self._pod_brand_id = state["pod_details"]["brand"]["brand_id"]
             else:
                 self._pod_brand = None
                 self._pod_brand_id = None
-            if "variety" in state['pod_details'] and state['pod_details']['variety'] is not None:
-                self._pod_variety = state['pod_details']['variety'][variety_key]
-                self._pod_variety_id = state['pod_details']['variety']['variety_id']
-                self._pod_roast_type = state['pod_details']['variety']['roast']
-                self._pod_is_tea = state['pod_details']['variety']['is_tea']
-                self._pod_is_iced = state['pod_details']['variety']['is_iced']
-                self._pod_is_flavored = state['pod_details']['variety']['is_flavored']
-                self._pod_is_powdered = state['pod_details']['variety']['is_powdered']
+            if (
+                "variety" in state["pod_details"]
+                and state["pod_details"]["variety"] is not None
+            ):
+                self._pod_variety = state["pod_details"]["variety"][variety_key]
+                self._pod_variety_id = state["pod_details"]["variety"]["variety_id"]
+                self._pod_roast_type = state["pod_details"]["variety"]["roast"]
+                self._pod_is_tea = state["pod_details"]["variety"]["is_tea"]
+                self._pod_is_iced = state["pod_details"]["variety"]["is_iced"]
+                self._pod_is_flavored = state["pod_details"]["variety"]["is_flavored"]
+                self._pod_is_powdered = state["pod_details"]["variety"]["is_powdered"]
             else:
                 self._pod_variety = None
                 self._pod_variety_id = None
-                self._pod_is_tea = self._pod_is_iced = self._pod_is_flavored = self._pod_is_powdered = None
+                self._pod_is_tea = (
+                    self._pod_is_iced
+                ) = self._pod_is_flavored = self._pod_is_powdered = None
         else:
-            self._pod_brand = self._pod_variety = self._pod_roast_type = self._pod_brand_id = self._pod_variety_id = None
-            self._pod_is_tea = self._pod_is_iced = self._pod_is_flavored = self._pod_is_powdered = None
+            self._pod_brand = (
+                self._pod_variety
+            ) = self._pod_roast_type = self._pod_brand_id = self._pod_variety_id = None
+            self._pod_is_tea = (
+                self._pod_is_iced
+            ) = self._pod_is_flavored = self._pod_is_powdered = None
+
 
 class UnauthorizedException(Exception):
-    pass
+    """Exception thrown when the user is unauthorized to call the api."""
