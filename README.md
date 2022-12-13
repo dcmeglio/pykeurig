@@ -1,1 +1,1 @@
-TODO
+Automation library for Keurig Smart Brewers. This API has been tested with the Keurig K-Supreme Plus SMART but should work with other SMART brewers as well. The API provides the ability to send commands to the brewer as well as receive status updates via a realtime Websocket SignalR based connection.
