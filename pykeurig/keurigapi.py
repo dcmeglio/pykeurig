@@ -5,12 +5,13 @@ import logging
 import time
 from typing import Dict, Optional
 import uuid
+import requests
 from tzlocal import get_localzone
 
 
 import httpx
 
-from signalrcore.hub_connection_builder import HubConnectionBuilder
+from signalrcoreplus.hub_connection_builder import HubConnectionBuilder
 
 from pykeurig.const import (
     API_URL,
@@ -79,7 +80,7 @@ class KeurigApi:
             self._access_token = json_result["access_token"]
             self._token_expires_at = time.time() + json_result["expires_in"] - 120
             self._refresh_token = json_result["refresh_token"]
-        except Exception:
+        except Exception as ex:
             return False
         finally:
             await client.aclose()
@@ -178,7 +179,12 @@ class KeurigApi:
                 options={"access_token_factory": self._get_signalr_access_token},
             )
             .with_automatic_reconnect(
-                {"type": "raw", "keep_alive_interval": 10, "reconnect_interval": 5}
+                {
+                    "type": "exponential",
+                    "keep_alive_interval": 10,
+                    "reconnect_interval": 2,
+                    "reconnect_max_interval": 240,
+                }
             )
             .build()
         )
@@ -230,10 +236,13 @@ class KeurigApi:
 
     def _get_signalr_access_token(self):
         """Gets the SignalR URL and access token synchronously"""
-        res = self._get("api/clnt/v1/signalr/negotiate")
-        self.__parse_signalr_access_token_response(res.json())
+        try:
+            res = self._get("api/clnt/v1/signalr/negotiate")
+            self.__parse_signalr_access_token_response(res.json())
 
-        return self._signalr_access_token
+            return self._signalr_access_token
+        except Exception as ex:
+            raise requests.exceptions.ConnectionError()
 
     def __parse_signalr_access_token_response(self, json_result):
         """Parse the JSON response to get the SignalR connection information"""
