@@ -205,7 +205,12 @@ class KeurigApi:
                 options={"access_token_factory": self._get_signalr_access_token},
             )
             .with_automatic_reconnect(
-                {"type": "raw", "keep_alive_interval": 10, "reconnect_interval": 5}
+                {
+                    "type": "exponential",
+                    "keep_alive_interval": 10,
+                    "reconnect_interval": 2,
+                    "reconnect_max_interval": 240,
+                }
             )
             .build()
         )

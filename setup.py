@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:  # pylint: disable=unspecified-encoding
 
 setuptools.setup(
     name="pykeurig",
-    version="1.1",
+    version="1.1.2",
     author="Dominick Meglio",
     license="MIT",
     author_email="dmeglio@gmail.com",
@@ -15,7 +15,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/dcmeglio/pykeurig",
     packages=setuptools.find_packages(),
-    install_requires=["httpx", "signalrcore", "tzlocal"],
+    install_requires=["httpx", "signalrcoreplus", "tzlocal"],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
