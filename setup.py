@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:  # pylint: disable=unspecified-encoding
 
 setuptools.setup(
     name="pykeurig",
-    version="1.0",
+    version="1.1",
     author="Dominick Meglio",
     license="MIT",
     author_email="dmeglio@gmail.com",
