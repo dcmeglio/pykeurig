@@ -58,6 +58,7 @@ class KeurigApi:
         self._signalr_access_token = None
         self._signalr_url = None
         self._devices = None
+        self._signalr_connection = None
 
     async def login(self, email: str, password: str):
         """Logs you into the Keurig API"""
@@ -190,7 +191,14 @@ class KeurigApi:
         )
         hub_connection.on("appliance-notifications", self._receive_signalr)
         hub_connection.start()
+        self._signalr_connection = hub_connection
         return True
+
+    def disconnect(self):
+        """Disconnect from the SignalR server"""
+        if self._signalr_connection is not None:
+            self._signalr_connection.stop()
+            self._signalr_connection = None
 
     def connect(self):
         """Establish a connection to the SignalR server to receive real-time push notifications."""
@@ -216,6 +224,7 @@ class KeurigApi:
         )
         hub_connection.on("appliance-notifications", self._receive_signalr)
         hub_connection.start()
+        self._signalr_connection = hub_connection
         return True
 
     async def async_get_brand_image(self, brand_id):
